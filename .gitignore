@@ -1,0 +1,56 @@
+# ===== Python =====
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ===== Backend data (giữ thư mục, bỏ nội dung) =====
+backend/data/uploads/*
+backend/data/results/*
+!backend/data/uploads/.gitkeep
+!backend/data/results/.gitkeep
+
+# ===== Node / Frontend =====
+node_modules/
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== File bản vẽ / dữ liệu nặng =====
+*.pdf
+*.dwg
+*.dxf
+
+# ===== PyInstaller / build đóng gói exe =====
+*.spec
+*.manifest
+
+# ===== Environment / secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Editor / IDE =====
+.vscode/
+.idea/
+*.swp
+.venv/
+__pycache__/

@@ -1,0 +1,41 @@
+# Giảm build context: chỉ gửi mã nguồn cần thiết cho Docker.
+
+# Python / venv
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend (Docker tự cài & build lại)
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Kết quả build đóng gói cũ
+backend/dist/
+backend/build/
+*.spec
+
+# Dữ liệu runtime & artifact nặng — không đưa vào image
+backend/data/
+extracted_json/
+*.pdf
+*.dwg
+*.dxf
+
+# Git & OS & editor
+.git/
+.gitignore
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Tài liệu không cần trong image
+*.md
+!DEPLOY.md

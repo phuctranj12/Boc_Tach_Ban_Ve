@@ -38,6 +38,8 @@ pnpm-debug.log*
 # ===== PyInstaller / build đóng gói exe =====
 *.spec
 *.manifest
+*.exe
+MEP-Drawing-Reader
 
 # ===== Environment / secrets =====
 .env

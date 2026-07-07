@@ -1,0 +1,20 @@
+# Blueprint deploy Render — https://render.com
+# Trên Render: New + → Blueprint → trỏ vào repo này → Apply. Nhận URL HTTPS cố định.
+services:
+  - type: web
+    name: mep-drawing-reader
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard            # >=2GB RAM: xử lý PDF vài chục MB tốn bộ nhớ (free 512MB sẽ OOM)
+    region: singapore         # gần VN nhất; đổi nếu muốn
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit # tự deploy lại mỗi khi push lên nhánh
+    envVars:
+      - key: RELOAD
+        value: "0"
+    # --- (Tuỳ chọn) giữ dữ liệu upload/kết quả qua mỗi lần redeploy ---
+    # Bỏ comment khối dưới nếu muốn dữ liệu bền (không mất khi restart).
+    # disk:
+    #   name: data
+    #   mountPath: /app/backend/data
+    #   sizeGB: 5

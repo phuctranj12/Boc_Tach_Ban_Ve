@@ -9,16 +9,59 @@ const EMPTY_ITEM = {
   size: "", cableSpec: "", conduit: "",
 };
 
-// cột sửa được (không gồm panelName — đã gom theo tủ ở header nhóm)
-const FIELDS = [
-  ["roadName", "Lộ", 70],
-  ["loadName", "Tên tải", 210],
-  ["power", "Công suất (W)", 90],
-  ["cb", "MCCB/RCBO", 170],
-  ["size", "Tiết diện", 80],
-  ["cableSpec", "Quy cách cáp", 280],
-  ["conduit", "Ống luồn", 150],
-];
+// ---- Cấu hình cột theo TỪNG loại sơ đồ ----
+// Mỗi loại chỉ hiện những cột nó thực sự đọc được (tránh cột rỗng, khó đối chiếu).
+//
+// Cách thêm/bớt cột:
+//   1) Khai báo nhãn + độ rộng mặc định của trường trong ALL_FIELDS.
+//   2) Thêm key trường đó vào danh sách của loại tương ứng trong TYPE_FIELDS.
+//   3) (tuỳ chọn) đặt nhãn riêng cho một loại trong LABEL_OVERRIDES.
+//
+// panelName KHÔNG nằm ở đây — đã gom theo tủ ở header nhóm.
+
+// Bảng nhãn + độ rộng mặc định của mọi trường có thể hiển thị.
+const ALL_FIELDS = {
+  panelCode: ["Mã tủ", 130],
+  roadName:  ["Lộ", 70],
+  loadName:  ["Tên tải", 210],
+  power:     ["Công suất (W)", 90],  // sẵn sàng: bật khi backend trả 'power' theo lộ
+  cb:        ["MCCB/RCBO", 170],     // sẵn sàng: bật khi backend trả 'cb' theo lộ
+  size:      ["Tiết diện", 80],
+  cableSpec: ["Quy cách cáp", 280],
+  conduit:   ["Ống luồn", 150],
+};
+
+// Cột hiển thị theo loại (diagramType do backend trả về).
+const TYPE_FIELDS = {
+  busbar_slash: ["roadName", "loadName", "size", "cableSpec", "conduit"],
+  panel_table:  ["roadName", "loadName", "size", "cableSpec", "conduit"],
+  hotel_db:     ["roadName", "loadName", "size", "cableSpec", "conduit"],
+  mep_tray:     ["roadName", "loadName", "size", "cableSpec", "conduit"],
+};
+
+// Loại chưa cấu hình -> dùng bộ cột mặc định này.
+const DEFAULT_FIELDS = ["roadName", "loadName", "size", "cableSpec", "conduit"];
+
+// Nhãn riêng cho loại đặc thù (mep_tray = thang–máng cáp, không phải cáp lộ).
+const LABEL_OVERRIDES = {
+  mep_tray: {
+    roadName:  "Hệ thống",
+    loadName:  "Tên hệ thống",
+    size:      "Kích thước",
+    cableSpec: "Cao độ",
+    conduit:   "Tuyến / Ref",
+  },
+};
+
+// -> [key, label, width] cho loại sơ đồ đang xem.
+function fieldsFor(type) {
+  const keys = TYPE_FIELDS[type] || DEFAULT_FIELDS;
+  const ov = LABEL_OVERRIDES[type] || {};
+  return keys.map((k) => {
+    const [label, width] = ALL_FIELDS[k];
+    return [k, ov[k] || label, width];
+  });
+}
 
 const NO_PANEL = "(không rõ tủ)";
 
@@ -38,6 +81,9 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
   const [zoom, setZoom] = useState(1);
 
   const idx = sheets.findIndex((s) => s.page === activePage);
+
+  // cột hiển thị theo loại sơ đồ đang xem
+  const fields = fieldsFor(review?.diagramType);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -324,7 +370,7 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
                 <table className="edit-table">
                   <thead>
                     <tr>
-                      {FIELDS.map(([k, label]) => <th key={k}>{label}</th>)}
+                      {fields.map(([k, label]) => <th key={k}>{label}</th>)}
                       <th></th>
                     </tr>
                   </thead>
@@ -336,6 +382,7 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
                         info={panelMap[panel]}
                         idxs={idxs}
                         items={review.items}
+                        fields={fields}
                         onCell={updateCell}
                         onDel={delRow}
                         onAdd={() => addRowTo(panel)}
@@ -373,8 +420,8 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
   );
 }
 
-function PanelGroup({ panel, info, idxs, items, onCell, onDel, onAdd, onRename }) {
-  const colCount = FIELDS.length + 1;
+function PanelGroup({ panel, info, idxs, items, fields, onCell, onDel, onAdd, onRename }) {
+  const colCount = fields.length + 1;
   // state cục bộ để gõ mượt; chỉ áp dụng đổi tên khi blur (tránh remount mất focus)
   const [name, setName] = useState(panel);
   useEffect(() => { setName(panel); }, [panel]);
@@ -401,7 +448,7 @@ function PanelGroup({ panel, info, idxs, items, onCell, onDel, onAdd, onRename }
       </tr>
       {idxs.map((i) => (
         <tr key={i}>
-          {FIELDS.map(([k, , w]) => (
+          {fields.map(([k, , w]) => (
             <td key={k}>
               <input style={{ width: w }} value={items[i][k] || ""} onChange={(e) => onCell(i, k, e.target.value)} />
             </td>

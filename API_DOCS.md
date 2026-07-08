@@ -225,7 +225,22 @@ Hỏi–đáp rule-based về quan hệ điều khiển/cấp nguồn/tổng cô
 
 ---
 
-## 6. Mã lỗi thường gặp
+## 6. Script kiểm thử API
+
+Có sẵn `scripts/test_api.py` chạy qua toàn bộ endpoint ở trên và báo PASS/FAIL:
+
+```bash
+pip install requests
+python scripts/test_api.py                       # test Space mặc định + PDF mẫu
+python scripts/test_api.py <BASE_URL> <file.pdf> # test server / file khác
+API_BASE=http://localhost:8000 python scripts/test_api.py   # test bản chạy local
+```
+
+Thoát mã `0` nếu tất cả PASS. Dùng để kiểm tra nhanh sau mỗi lần deploy.
+
+---
+
+## 7. Mã lỗi thường gặp
 
 | HTTP | Ý nghĩa | Cách xử lý |
 |------|---------|-----------|

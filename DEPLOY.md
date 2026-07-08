@@ -2,8 +2,10 @@
 
 Mục tiêu: có **1 link HTTPS cố định** cho mọi người vào dùng thử, luôn chạy, không
 phụ thuộc máy cá nhân. App đóng gói thành **1 container Docker** chạy cả API lẫn giao
-diện (same-origin), nên deploy ở đâu cũng được. Dưới đây hướng dẫn **Render** (đơn giản
-nhất), kèm cách chạy Docker cục bộ để kiểm thử trước.
+diện (same-origin), nên deploy ở đâu cũng được.
+
+**Khuyến nghị: Hugging Face Spaces (Docker) — miễn phí, RAM 16GB** (mục 2 bên dưới),
+hợp app này vì xử lý PDF tốn bộ nhớ. Render (mục 3) là lựa chọn thay thế.
 
 ---
 
@@ -23,9 +25,50 @@ Mở trình duyệt: <http://localhost:8000>
 
 Dừng: `Ctrl+C`.
 
+> Muốn giống hệt môi trường HF (chạy bằng user không phải root): thêm `--user 1000`
+> vào lệnh `docker run`.
+
 ---
 
-## 2. Deploy lên Render (khuyến nghị)
+## 2. Deploy lên Hugging Face Spaces (Docker) — MIỄN PHÍ, khuyến nghị
+
+Free, RAM tới **16GB** (đủ cho PDF lớn). Space sẽ có link dạng
+`https://<user>-boc-tach-ban-ve.hf.space`. Ngủ khi lâu không ai dùng, vào lại tự thức.
+
+Repo đã cấu hình sẵn cho HF:
+- `README.md` có khối `---` khai báo `sdk: docker` và `app_port: 8000`.
+- `Dockerfile` chạy bằng user `UID 1000` (đúng chuẩn HF) và cấp quyền ghi `data/`.
+
+### Các bước
+
+1. Có tài khoản <https://huggingface.co> (miễn phí).
+2. Tạo Space: **New → Space** → đặt tên (vd `Boc_Tach_Ban_Ve`) →
+   **SDK = Docker** (chọn *Blank*) → **Hardware = CPU basic (free)** → Create.
+3. HF hiện hướng dẫn git. Lấy mã nguồn lên Space bằng 1 trong 2 cách:
+
+   **Cách A — thêm remote HF vào repo hiện tại rồi push:**
+   ```bash
+   # cần "Access Token" (Settings → Access Tokens, quyền write) để đăng nhập khi push
+   git remote add hf https://huggingface.co/spaces/<user>/<ten-space>
+   git push hf main
+   ```
+   > Khi push hỏi mật khẩu: dán **Access Token** (không phải mật khẩu tài khoản).
+
+   **Cách B — clone Space rồi copy code vào** (nếu muốn tách khỏi repo GitHub):
+   ```bash
+   git clone https://huggingface.co/spaces/<user>/<ten-space> hf-space
+   # copy toàn bộ file dự án vào hf-space/ (trừ .git), rồi:
+   cd hf-space && git add . && git commit -m "deploy" && git push
+   ```
+4. Vào tab **App** của Space, chờ HF build (vài phút, xem log ở tab **Logs**). Xong là
+   có link công khai để chia sẻ cho mọi người test.
+
+> **Lưu ý HF:** dữ liệu upload là **tạm** (mất khi Space restart/build lại). Muốn giữ
+> bền cần bật *Persistent Storage* (tính phí). Với mục đích test thì để tạm là được.
+
+---
+
+## 3. Deploy lên Render (thay thế)
 
 Có sẵn file `render.yaml` (Blueprint) nên chỉ vài bước bấm chuột.
 
@@ -52,7 +95,7 @@ Cùng `Dockerfile` này chạy được nơi khác không cần đổi:
 
 ---
 
-## 3. Lưu ý vận hành (quan trọng)
+## 4. Lưu ý vận hành (quan trọng)
 
 - **RAM ≥ 2GB.** PDF lớn + render ảnh preview + bóc trước tất cả trang (chạy nền) rất tốn
   bộ nhớ. Instance nhỏ sẽ bị hệ thống kill → lỗi 502.
@@ -67,11 +110,12 @@ Cùng `Dockerfile` này chạy được nơi khác không cần đổi:
 
 ---
 
-## 4. Các file liên quan
+## 5. Các file liên quan
 
 | File | Vai trò |
 |------|---------|
-| `Dockerfile` | Build giao diện + đóng gói backend chạy chung 1 container |
+| `Dockerfile` | Build giao diện + đóng gói backend chạy chung 1 container (user UID 1000 cho HF) |
 | `.dockerignore` | Loại venv/node_modules/data/pdf khỏi build cho nhẹ & nhanh |
-| `render.yaml` | Cấu hình deploy Render (Blueprint) |
+| `README.md` | Khối `---` đầu file = cấu hình Hugging Face Space (sdk: docker, app_port) |
+| `render.yaml` | Cấu hình deploy Render (Blueprint) — lựa chọn thay thế |
 | `backend/app/main.py` | FastAPI phục vụ cả API (`/api/...`) lẫn giao diện tĩnh |

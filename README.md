@@ -1,4 +1,17 @@
+---
+title: Boc Tach Ban Ve MEP
+emoji: 📐
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # MEP Drawing Reader — Vector + Graph + (AI sau)
+
+> ℹ️ Khối `---` phía trên là cấu hình bắt buộc cho **Hugging Face Spaces (Docker)**.
+> Cách deploy: xem [DEPLOY.md](DEPLOY.md).
 
 Đọc bản vẽ PDF MEP (điện chiếu sáng, ổ cắm, single line, plumbing…) với độ chính xác cao
 bằng cách **khai thác vector + layer CAD thật**, dựng **graph topology**, rồi áp **rule engine** —

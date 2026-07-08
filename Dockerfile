@@ -23,19 +23,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     RELOAD=0
 
+# Hugging Face Spaces chạy container bằng user UID 1000 (không phải root). Tạo sẵn
+# user này và cấp quyền để app ghi được thư mục data/ (upload, kết quả). Không có
+# bước này thì upload trên HF sẽ lỗi "Permission denied".
+RUN useradd -m -u 1000 user
+
 WORKDIR /app
 
-# Thư viện Python. pymupdf dùng wheel self-contained (không cần lib hệ thống).
-# Nếu về sau `import fitz` lỗi thiếu lib, thêm: RUN apt-get update && apt-get install -y --no-install-recommends libgl1
+# Thư viện Python (cài dưới quyền root trước khi đổi user).
+# pymupdf dùng wheel self-contained (không cần lib hệ thống). Nếu về sau `import fitz`
+# lỗi thiếu lib, thêm: RUN apt-get update && apt-get install -y --no-install-recommends libgl1
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install -r /app/backend/requirements.txt
 
-# Mã nguồn backend + giao diện đã build.
+# Mã nguồn backend + giao diện đã build, sở hữu bởi 'user' để ghi được data/.
 # Giữ đúng layout /app/backend + /app/frontend/dist để main.py resolve:
 #   Path(__file__).parents[2] / "frontend" / "dist" == /app/frontend/dist
-COPY backend/ /app/backend/
-COPY --from=frontend /frontend/dist /app/frontend/dist
+COPY --chown=user:user backend/ /app/backend/
+COPY --chown=user:user --from=frontend /frontend/dist /app/frontend/dist
 
+# Đổi chủ TOÀN BỘ /app sang 'user' (kể cả thư mục /app/backend do bước cài đặt tạo ra
+# dưới quyền root) để app tạo/ghi được data/ khi chạy bằng UID 1000 trên HF.
+RUN chown -R user:user /app
+
+USER user
 WORKDIR /app/backend
 
 # Nền tảng cloud (Render/Railway) inject $PORT; mặc định 8000 khi chạy tay.

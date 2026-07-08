@@ -14,11 +14,16 @@ dist/
 .coverage
 htmlcov/
 
-# ===== Backend data (giữ thư mục, bỏ nội dung) =====
+# ===== Backend data runtime (giữ thư mục, bỏ nội dung) =====
 backend/data/uploads/*
 backend/data/results/*
+backend/data/reviews/*
+backend/data/takeoff/*
 !backend/data/uploads/.gitkeep
 !backend/data/results/.gitkeep
+
+# ===== Artifact dev / dump JSON nặng (không cần cho deploy) =====
+extracted_json/
 
 # ===== Node / Frontend =====
 node_modules/

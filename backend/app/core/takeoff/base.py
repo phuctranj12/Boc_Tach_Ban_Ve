@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 
 import fitz
 
+from ..page_text import text_dict as _text_dict, text_words as _text_words
+
 _SIZE_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*mm2", re.IGNORECASE)
 
 
@@ -76,13 +78,15 @@ class TakeoffResult:
 
 
 # ---------- tiện ích đọc PDF dùng chung ----------
+# Mọi hàm dưới đây đọc text qua page_text.* để cả 4 extractor dùng chung một lượt
+# parse cho mỗi trang (xem app/core/page_text.py).
 def text_scale(page: fitz.Page) -> float:
     """Chiều cao chữ TRUNG VỊ (px) — proxy TỶ LỆ plot của bản vẽ (ổn định theo tỷ
     lệ, không phụ thuộc mật độ nội dung). Dùng để tự suy các ngưỡng khoảng cách
     (extractor calibrate ở baseline rồi nhân theo tỷ lệ này)."""
     import statistics
     hs = []
-    for b in page.get_text("dict")["blocks"]:
+    for b in _text_dict(page)["blocks"]:
         for l in b.get("lines", []):
             for s in l["spans"]:
                 bb = s["bbox"]
@@ -101,7 +105,7 @@ def result_quality(res: "TakeoffResult") -> int:
 def collect_words(page: fitz.Page) -> list[TextItem]:
     """Text ngang (horizontal words)."""
     out = []
-    for w in page.get_text("words"):
+    for w in _text_words(page):
         t = w[4].strip()
         if t:
             out.append(TextItem(t, (w[0] + w[2]) / 2, (w[1] + w[3]) / 2))
@@ -111,7 +115,7 @@ def collect_words(page: fitz.Page) -> list[TextItem]:
 def collect_vertical_lines(page: fitz.Page) -> list[TextItem]:
     """Text dọc (rotated 90°) — gộp theo line, lấy nguyên cụm."""
     out = []
-    for b in page.get_text("dict")["blocks"]:
+    for b in _text_dict(page)["blocks"]:
         for l in b.get("lines", []):
             d = l.get("dir", (1, 0))
             if abs(d[0]) < 0.5:
@@ -125,7 +129,7 @@ def collect_vertical_lines(page: fitz.Page) -> list[TextItem]:
 def collect_horizontal_lines(page: fitz.Page) -> list[TextItem]:
     """Text ngang gộp theo line (giữ nguyên cụm nhiều từ)."""
     out = []
-    for b in page.get_text("dict")["blocks"]:
+    for b in _text_dict(page)["blocks"]:
         for l in b.get("lines", []):
             d = l.get("dir", (1, 0))
             if abs(d[0]) >= 0.5:

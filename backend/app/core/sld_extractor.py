@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 
 import fitz
 
+from .page_text import text_dict, text_words
+
 # ----- ngưỡng cấu hình (point) -----
 SLD_CFG = {
     "terminal_row_tol": 8,       # gộp các nhãn terminal cùng 1 hàng
@@ -75,10 +77,10 @@ def _collect_texts(page: fitz.Page) -> tuple[list[TextItem], list[TextItem]]:
     """Trả về (horizontal_words, vertical_lines)."""
     words = [
         TextItem(w[4].strip(), (w[0] + w[2]) / 2, (w[1] + w[3]) / 2)
-        for w in page.get_text("words") if w[4].strip()
+        for w in text_words(page) if w[4].strip()
     ]
     verticals: list[TextItem] = []
-    for b in page.get_text("dict")["blocks"]:
+    for b in text_dict(page)["blocks"]:
         for l in b.get("lines", []):
             d = l.get("dir", (1, 0))
             if abs(d[0]) < 0.5:  # text dọc

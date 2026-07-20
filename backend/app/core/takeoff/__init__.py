@@ -12,7 +12,8 @@ from __future__ import annotations
 import fitz
 
 from .base import TakeoffResult, result_quality
-from . import busbar_slash, panel_table, hotel_db, mep_floorplan, orient, outlined_text
+from . import (busbar_slash, panel_table, hotel_db, mep_floorplan, cdc_elv_unit,
+               orient, outlined_text)
 
 # thứ tự không quan trọng — chọn theo điểm cao nhất
 EXTRACTORS = {
@@ -20,6 +21,7 @@ EXTRACTORS = {
     "panel_table": panel_table,
     "hotel_db": hotel_db,
     "mep_tray": mep_floorplan,
+    "cdc_elv_unit": cdc_elv_unit,
 }
 
 

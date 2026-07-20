@@ -12,7 +12,7 @@ from __future__ import annotations
 import fitz
 
 from .base import TakeoffResult, result_quality
-from . import busbar_slash, panel_table, hotel_db, mep_floorplan, orient
+from . import busbar_slash, panel_table, hotel_db, mep_floorplan, orient, outlined_text
 
 # thứ tự không quan trọng — chọn theo điểm cao nhất
 EXTRACTORS = {
@@ -39,6 +39,13 @@ def _extract_core(page: fitz.Page, page_index: int, kind: str) -> TakeoffResult:
     if kind == "unknown" or kind not in EXTRACTORS:
         res = TakeoffResult(page=page_index, diagram_type="unknown")
         res.debug = {"scores": scores, "error": "Không nhận diện được loại sơ đồ."}
+        # Không nhận ra loại thì tìm hiểu VÌ SAO: nếu chữ đã bị convert thành nét khi
+        # xuất PDF thì không extractor nào bóc được, phải báo rõ cho người dùng.
+        # Chỉ chạy ở nhánh thất bại nên không làm chậm đường chạy bình thường.
+        flag = outlined_text.check(page)
+        if flag:
+            res.debug.update(flag)
+            res.debug["error"] = flag["message"]
         return res
     res = EXTRACTORS[kind].extract(page, page_index)
     res.debug["scores"] = scores

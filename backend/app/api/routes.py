@@ -13,6 +13,7 @@ from ..core import export
 from ..core.pipeline import run_pipeline
 from ..core.qa import answer
 from ..core.takeoff import extract_takeoff
+from ..core.takeoff.sheet_meta import extract_meta
 from ..storage import review_store, store, takeoff_cache
 
 router = APIRouter(prefix="/api")
@@ -42,11 +43,18 @@ def _cache_put(job_id: str, page: int, payload: dict) -> None:
 
 def _payload_from_page(doc, page: int) -> dict:
     res = extract_takeoff(doc[page], page).to_dict()
+    debug = res.get("debug") or {}
     return {
         "page": page,
         "diagramType": res["diagramType"],
         "panelName": res["panelName"],
         "panels": res["panels"],
+        # Lý do bóc không ra (vd chữ đã bị convert thành nét khi xuất PDF) — hiện lên
+        # giao diện để người dùng biết phải xử lý gì, thay vì thấy bảng trống.
+        "notice": debug.get("message", ""),
+        # Thông tin hành chính của trang (dự án/tháp-hầm/khu vực/tầng/điển hình).
+        # Đọc được thì điền sẵn, không đọc được để rỗng cho người dùng tự nhập.
+        "meta": extract_meta(doc[page]),
         "items": res["items"],
         "confirmed": False,
         "source": "extracted",
@@ -193,6 +201,7 @@ async def confirm_all(job_id: str):
                 payload = {"diagramType": saved.get("diagramType", ""),
                            "panelName": saved.get("panelName", ""),
                            "panels": saved.get("panels", []),
+                           "meta": saved.get("meta"),  # giữ nguyên bản người dùng đã sửa
                            "items": items, "confirmed": True}
             else:
                 res = extract_takeoff(doc[page], page).to_dict()
@@ -202,6 +211,7 @@ async def confirm_all(job_id: str):
                 payload = {"diagramType": res["diagramType"],
                            "panelName": res["panelName"],
                            "panels": res.get("panels", []),
+                           "meta": extract_meta(doc[page]),
                            "items": items, "confirmed": True}
             review_store.save_page(job_id, page, payload)
             confirmed += 1

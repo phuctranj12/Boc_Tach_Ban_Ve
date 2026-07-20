@@ -15,10 +15,18 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from ..storage import review_store
+from .takeoff.sheet_meta import normalize_meta
 
 # (khoá field, tiêu đề cột, độ rộng)
+# 5 cột đầu là thông tin hành chính của TRANG (từ rec['meta']), được gắn vào mọi
+# dòng của trang đó để mỗi dòng BOQ tự đứng độc lập khi lọc/gộp trong Excel.
 COLUMNS = [
     ("page", "Trang", 8),
+    ("project", "Dự án / Hạng mục", 24),
+    ("towerOrBasement", "Tháp / Hầm", 14),
+    ("area", "Khu vực", 22),
+    ("floor", "Tầng", 10),
+    ("typicalCode", "Điển hình", 18),
     ("panelName", "Tủ / Khu vực", 30),
     ("roadName", "Lộ", 10),
     ("loadName", "Tên tải", 30),
@@ -36,9 +44,13 @@ def collect_items(job_id: str, only_confirmed: bool = False) -> list[dict]:
     for _, rec in sorted(data["pages"].items(), key=lambda kv: int(kv[0])):
         if only_confirmed and not rec.get("confirmed"):
             continue
+        meta = normalize_meta(rec.get("meta"))
         for it in rec.get("items", []):
             row = dict(it)
             row["page"] = rec["page"]
+            # Thông tin trang đứng TRƯỚC field của item: item không có khoá nào
+            # trùng tên nên không ghi đè, nhưng đặt vậy cho rõ thứ tự ưu tiên.
+            row.update(meta)
             rows.append(row)
     return rows
 

@@ -65,6 +65,17 @@ function fieldsFor(type) {
 
 const NO_PANEL = "(không rõ tủ)";
 
+// Thông tin hành chính của TRANG (backend trả trong review.meta). Đọc được thì
+// điền sẵn, không đọc được để trống cho người dùng tự nhập. Luôn xuất ra JSON/Excel.
+const META_FIELDS = [
+  ["project", "Dự án / Hạng mục", "vd: LÔ CCCT-02"],
+  ["towerOrBasement", "Tháp / Hầm", "vd: Tháp A, Hầm B1"],
+  ["area", "Khu vực", "vd: Văn phòng tầng 2 (VPT 2)"],
+  ["floor", "Tầng", "vd: 2"],
+  ["typicalCode", "Điển hình", "vd: 2BR - TYPE C"],
+];
+const EMPTY_META = Object.fromEntries(META_FIELDS.map(([k]) => [k, ""]));
+
 // Độ phân giải render ảnh bản vẽ: cao -> nét khi phóng to.
 const PREVIEW_SCALE = 2.5;
 const ZOOM_MIN = 1;      // 100% = vừa khít bề ngang khung
@@ -143,6 +154,10 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
   }, [review]);
 
   const setItems = (items) => { setReview((r) => ({ ...r, items })); setDirty(true); };
+  const updateMeta = (field, value) => {
+    setReview((r) => ({ ...r, meta: { ...EMPTY_META, ...(r.meta || {}), [field]: value } }));
+    setDirty(true);
+  };
   const updateCell = (i, field, value) =>
     setItems(review.items.map((it, j) => (j === i ? { ...it, [field]: value } : it)));
   const delRow = (i) => setItems(review.items.filter((_, j) => j !== i));
@@ -158,6 +173,7 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
       await saveReview(jobId, activePage, {
         diagramType: review.diagramType, panelName: review.panelName,
         panels: review.panels || [],
+        meta: { ...EMPTY_META, ...(review.meta || {}) },
         items: review.items,
         confirmed: confirmed ?? statusMap[activePage]?.confirmed ?? false,
       });
@@ -354,6 +370,13 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
                 {review.diagramType || "—"} · {review.items.length} lộ · {groups.length} tủ
                 {review.source === "extracted" && " · (bóc tự động, chưa lưu)"}
               </div>
+              {review.notice && (
+                <div className="panel-info" style={{ display: "block", marginBottom: 10 }}>
+                  <b>⚠ Không bóc tách được trang này</b>
+                  <div className="muted" style={{ marginTop: 4 }}>{review.notice}</div>
+                </div>
+              )}
+              <MetaEditor meta={review.meta} onChange={updateMeta} />
               {review.panels?.some((p) => p.kind !== "sub") && (
                 <div className="panel-info">
                   {review.panels.filter((p) => p.kind !== "sub").map((p) => (
@@ -415,6 +438,33 @@ export default function TakeoffReview({ jobId, sheets, activePage, onSelect }) {
         <span style={{ flex: 1 }} />
         <button className="btn ghost" onClick={() => download("json")}>⬇ Xuất JSON</button>
         <button className="btn" onClick={() => download("xlsx")}>⬇ Xuất Excel (BOQ)</button>
+      </div>
+    </div>
+  );
+}
+
+// Thông tin hành chính của trang — luôn hiện đủ 5 ô, kể cả khi bản vẽ không có dữ
+// liệu, để người dùng tự điền rồi xác nhận. Ô trống có viền nhạt báo "cần điền".
+function MetaEditor({ meta, onChange }) {
+  const m = { ...EMPTY_META, ...(meta || {}) };
+  const missing = META_FIELDS.filter(([k]) => !m[k]).length;
+  return (
+    <div className="panel-info" style={{ display: "block", marginBottom: 10 }}>
+      <div className="muted" style={{ marginBottom: 6 }}>
+        Thông tin trang {missing > 0 && <>· <b>{missing}</b> trường chưa đọc được, mời điền tay</>}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {META_FIELDS.map(([k, label, ph]) => (
+          <label key={k} style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 12 }}>
+            <span className="muted">{label}</span>
+            <input
+              value={m[k]}
+              placeholder={ph}
+              onChange={(e) => onChange(k, e.target.value)}
+              style={{ width: 190, borderStyle: m[k] ? "solid" : "dashed" }}
+            />
+          </label>
+        ))}
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ import json
 from datetime import datetime, timezone
 
 from ..config import DATA_DIR
+from ..core.takeoff.sheet_meta import normalize_meta
 
 REVIEW_DIR = DATA_DIR / "reviews"
 REVIEW_DIR.mkdir(parents=True, exist_ok=True)
@@ -40,7 +41,11 @@ def _save(data: dict) -> None:
 
 
 def get_page(job_id: str, page: int) -> dict | None:
-    return _load(job_id)["pages"].get(str(page))
+    rec = _load(job_id)["pages"].get(str(page))
+    if rec is not None:
+        # Bản ghi lưu trước khi có tính năng này chưa có 'meta' -> bù khoá rỗng.
+        rec["meta"] = normalize_meta(rec.get("meta"))
+    return rec
 
 
 def save_page(job_id: str, page: int, payload: dict) -> dict:
@@ -50,6 +55,9 @@ def save_page(job_id: str, page: int, payload: dict) -> dict:
         "diagramType": payload.get("diagramType", ""),
         "panelName": payload.get("panelName", ""),
         "panels": payload.get("panels", []),     # tủ tổng (name/power/ptt/kdt)
+        # Thông tin hành chính người dùng xem/sửa được. Chuẩn hoá để luôn đủ 5 khoá
+        # kể cả khi client gửi thiếu — JSON xuất ra phải luôn có các trường này.
+        "meta": normalize_meta(payload.get("meta")),
         "items": payload.get("items", []),
         "confirmed": bool(payload.get("confirmed", False)),
         "updatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),

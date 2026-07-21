@@ -168,6 +168,39 @@ def _nearest(src: TextItem, pool: list[TextItem], max_d: float = math.inf):
     return best
 
 
+# Lộ và nhãn PHA của nó căn thẳng hàng: khoảng cách y chỉ ~0-19px (đo trên type3).
+# Ngoài dải này gần như chắc chắn là bám nhầm.
+_PHASE_ALIGN_TOL = 22.0
+
+
+def _match_one_to_one(loads: list[TextItem], phases: list[TextItem],
+                      tol: float) -> dict[int, TextItem]:
+    """Gán mỗi lộ ĐÚNG một nhãn pha, mỗi pha chỉ thuộc MỘT lộ (1 pole = 1 mạch).
+
+    Vì sao KHÔNG dùng 'mỗi lộ giành pha gần nhất': khi một lộ không có pha thẳng
+    hàng (pole không ghi nhãn, hoặc trang không phải SLD tủ), nó sẽ bám vào pha
+    gần nhất còn lại — thường là L3 cuối cụm — khiến nhiều lộ dồn nhầm về cùng
+    'L3 - S…', đè lên lộ SPARE thật. Ghép 1-1 theo khoảng cách tăng dần, chỉ nhận
+    cặp thẳng hàng (≤ tol), nên lộ orphan để TRỐNG pha thay vì cướp pha của lộ khác.
+    """
+    pairs = []
+    for i, l in enumerate(loads):
+        for j, p in enumerate(phases):
+            if abs(l.y - p.y) <= tol and abs(l.x - p.x) <= 450:
+                pairs.append((_dist(l, p), i, j))
+    pairs.sort()
+    used_l: set[int] = set()
+    used_p: set[int] = set()
+    out: dict[int, TextItem] = {}
+    for _, i, j in pairs:
+        if i in used_l or j in used_p:
+            continue
+        used_l.add(i)
+        used_p.add(j)
+        out[i] = phases[j]
+    return out
+
+
 def _is_loadish(t: TextItem) -> bool:
     """Token mô tả TÊN TẢI? (không phải cáp/earth/CB/power/tiêu đề/ghi chú)."""
     s = t.text
@@ -414,13 +447,22 @@ def extract_items(words: list[TextItem], hlines: list[TextItem],
             for i in grp:
                 load_panel[i] = pan
 
+    # GÁN PHA 1-1: mỗi pole (L1/L2/L3) chỉ thuộc một mạch. Chỉ ghép lộ THƯỜNG (không
+    # phải motor — motor neo theo số mạch, không theo pha). Lộ không có pha thẳng hàng
+    # sẽ để TRỐNG pha thay vì cướp pha xa (xem _match_one_to_one).
+    load_tokens = [a[0] for a in anchors]
+    non_motor_idx = [i for i, a in enumerate(anchors) if not a[2]]
+    phase_of_sub = _match_one_to_one([load_tokens[i] for i in non_motor_idx],
+                                     phases, _PHASE_ALIGN_TOL * s)
+    phase_of = {non_motor_idx[k]: v for k, v in phase_of_sub.items()}
+
     rows: list[tuple] = []       # (sort_key, TakeoffItem) — sắp lại để cùng cụm liền nhau
     seen_panels: list[str] = []  # thứ tự panel xuất hiện (giữ nguyên trên bảng)
     for idx, (load, sp, is_motor) in enumerate(anchors):
         # roadName = PHA + CỤM (vd "L1 - S1") để phân biệt các nhánh trùng pha.
-        # PHA: nhãn L# gần LOAD (căn thẳng theo y). CỤM: nhãn S#/P# gần chính NHÃN PHA
-        # (pha & cụm cùng ở MCB nên sát nhau) → ghép đúng cặp, tránh lấy nhầm cụm trên.
-        ph = _nearest(load, phases, 450 * s)
+        # PHA: pole L# ĐÃ GHÉP 1-1 với lộ. CỤM: nhãn S#/P# gần chính NHÃN PHA (pha &
+        # cụm cùng ở MCB nên sát nhau) → ghép đúng cặp, tránh lấy nhầm cụm trên.
+        ph = phase_of.get(idx)
         gr = _nearest(ph, groups, 450 * s) if ph else _nearest(load, groups, 450 * s)
         if is_motor:
             n = _nearest(load, nums, 450 * s)

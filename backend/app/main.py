@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
-from .sheet_config import router as sheet_config_router
+from .sheet_config import SHEET_CONFIG_WEB, router as sheet_config_router
 
 app = FastAPI(
     title="MEP Drawing Reader",
@@ -30,6 +30,16 @@ app.include_router(router)
 # Sheet Configure: luồng độc lập, chỉ ở nhờ chung image. Phải đăng ký trước
 # catch-all SPA bên dưới, nếu không mọi /api/sheet-config/* sẽ rơi vào index.html.
 app.include_router(sheet_config_router)
+
+# Giao diện web của Sheet Configure tại /json-to-sheet. Bản build dùng base riêng
+# nên asset của nó nằm ở /json-to-sheet/assets, không đụng /assets của giao diện
+# bóc tách. Cũng phải mount trước catch-all SPA bên dưới.
+if SHEET_CONFIG_WEB.is_dir():
+    app.mount(
+        "/json-to-sheet",
+        StaticFiles(directory=SHEET_CONFIG_WEB, html=True),
+        name="sheet-config-web",
+    )
 
 
 @app.get("/api/health")

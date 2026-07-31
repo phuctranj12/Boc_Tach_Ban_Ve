@@ -94,6 +94,16 @@ Mở trình duyệt → kéo-thả `ban_ve_goc.pdf` vào → xem kết quả.
 | GET | `/api/results/{job_id}/export.json?confirmed=` | Xuất JSON gộp (QS) |
 | GET | `/api/results/{job_id}/export.xlsx?confirmed=` | Xuất Excel BOQ (2 sheet: Chi tiết + Tổng hợp) |
 
+### API ở nhờ: Sheet Configure
+
+Dưới prefix `/api/sheet-config` còn một dịch vụ **hoàn toàn tách biệt**, chuẩn hoá
+cấu hình bộ bản vẽ shop (`DocumentSetConfig`) từ JSON/JSONC sang JSON hợp lệ. Nó
+không dùng chung dữ liệu, storage hay pipeline nào với luồng bóc tách — chỉ ở chung
+image để dùng một chỗ deploy duy nhất.
+
+Hướng dẫn tích hợp: [API_DOCS_SHEET_CONFIG.md](API_DOCS_SHEET_CONFIG.md).
+Chi tiết kỹ thuật: [backend/app/sheet_config/README.md](backend/app/sheet_config/README.md).
+
 ### Human-in-the-loop & xuất BOQ
 Trước khi xuất, giao diện chia đôi: **trái** = ảnh bản vẽ trang, **phải** = bảng bóc tách **sửa được** (thêm/xoá/sửa dòng), Lưu & Xác nhận từng trang. Duyệt lần lượt qua các trang rồi **Xuất JSON / Excel** (tuỳ chọn chỉ xuất trang đã xác nhận). Backend: `core/export.py` (openpyxl) + `storage/review_store.py` (lưu chỉnh sửa tách khỏi bản bóc tự động). Frontend: `components/TakeoffReview.jsx`.
 

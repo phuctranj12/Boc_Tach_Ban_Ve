@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
+from .sheet_config import router as sheet_config_router
 
 app = FastAPI(
     title="MEP Drawing Reader",
@@ -25,6 +26,10 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+# Sheet Configure: luồng độc lập, chỉ ở nhờ chung image. Phải đăng ký trước
+# catch-all SPA bên dưới, nếu không mọi /api/sheet-config/* sẽ rơi vào index.html.
+app.include_router(sheet_config_router)
 
 
 @app.get("/api/health")

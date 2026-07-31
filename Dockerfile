@@ -36,6 +36,13 @@ WORKDIR /app
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install -r /app/backend/requirements.txt
 
+# Runtime Node cho module Sheet Configure (backend/app/sheet_config). Logic của
+# module đó viết bằng JavaScript và dùng chung y nguyên với bản web chạy trên
+# trình duyệt, nên gọi Node thay vì chép lại sang Python — tránh hai bản lệch nhau.
+# node:20-slim và python:3.12-slim cùng nền Debian bookworm nên binary chạy được
+# trực tiếp, không cần cài thêm thư viện hệ thống nào.
+COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
+
 # Mã nguồn backend + giao diện đã build, sở hữu bởi 'user' để ghi được data/.
 # Giữ đúng layout /app/backend + /app/frontend/dist để main.py resolve:
 #   Path(__file__).parents[2] / "frontend" / "dist" == /app/frontend/dist

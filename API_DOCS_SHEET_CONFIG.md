@@ -15,6 +15,18 @@ https://tranphuc120203-boc-tach-ban-ve.hf.space
 Mọi endpoint nằm dưới prefix `/api/sheet-config`. Không cần xác thực. CORS mở
 cho mọi origin nên gọi thẳng từ trình duyệt được.
 
+**Giao diện web cho người dùng cuối**
+
+```
+https://tranphuc120203-boc-tach-ban-ve.hf.space/json-to-sheet
+```
+
+Dành cho người ngồi chỉnh tay: mô phỏng tờ giấy A1/A3, kéo thả sắp xếp trình tự
+sheet, nhập số ngay trên đường kích thước. Giao diện chạy **hoàn toàn trong trình
+duyệt**, không gọi API này — cấu hình không rời khỏi máy người dùng.
+
+Tài liệu dưới đây dành cho việc gọi bằng máy.
+
 ---
 
 ## 1. Dịch vụ này giải quyết việc gì

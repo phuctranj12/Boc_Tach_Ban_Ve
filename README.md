@@ -101,6 +101,7 @@ cấu hình bộ bản vẽ shop (`DocumentSetConfig`) từ JSON/JSONC sang JSON
 không dùng chung dữ liệu, storage hay pipeline nào với luồng bóc tách — chỉ ở chung
 image để dùng một chỗ deploy duy nhất.
 
+Giao diện web của nó: **`/json-to-sheet`**.
 Hướng dẫn tích hợp: [API_DOCS_SHEET_CONFIG.md](API_DOCS_SHEET_CONFIG.md).
 Chi tiết kỹ thuật: [backend/app/sheet_config/README.md](backend/app/sheet_config/README.md).
 

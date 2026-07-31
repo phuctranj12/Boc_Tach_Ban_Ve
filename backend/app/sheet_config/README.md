@@ -9,6 +9,22 @@ dùng chung `storage`, không ghi vào `data/`. Nó hoàn toàn stateless. Gỡ 
 mục này đi thì dự án bóc tách vẫn chạy nguyên vẹn, chỉ cần xoá thêm 2 dòng
 `sheet_config` trong `app/main.py`.
 
+## Giao diện web
+
+Bản build Vite của repo `json-to-sheet` nằm ở `web/`, được `app/main.py` mount tại
+`/json-to-sheet`. Build bằng `npm run build:embed` (base `/json-to-sheet/`) — nếu
+build bằng `npm run build` thường thì asset sẽ trỏ vào `/assets` và giẫm lên giao
+diện bóc tách.
+
+```bash
+cd <đường-dẫn>/json-to-sheet/ui
+npm run build:embed
+rm -rf <repo-này>/backend/app/sheet_config/web
+cp -R dist-embed <repo-này>/backend/app/sheet_config/web
+```
+
+Giao diện chạy thuần client, không gọi API — hai thứ độc lập nhau.
+
 ## Endpoint
 
 Tất cả nằm dưới prefix `/api/sheet-config`:

@@ -24,7 +24,7 @@ import re
 
 import fitz
 
-from .base import TakeoffItem, TakeoffResult, parse_size
+from .base import TakeoffItem, TakeoffResult, parse_size, text_scale
 from ..page_text import text_dict
 
 # "1x CÁP UTP 4P-0.5 Cat6", "4x CÁP UTP…", "1x CÁP QUANG SINGLEMODE 2FO"
@@ -34,12 +34,25 @@ _CONDUIT_RE = re.compile(r"^\(\s*(ỐNG\s+[^)]+)\)$", re.IGNORECASE)
 # Mã căn hộ trong tiêu đề bảng: "CHI TIẾT TỦ ĐIỆN NHẸ CĂN HỘ CH01"
 _UNIT_RE = re.compile(r"CĂN\s+HỘ\s+(CH\d+[A-Z]?)", re.IGNORECASE)
 
+# Ngưỡng đo trên bản vẽ CHUẨN (02.DIEN NHE.pdf, chữ cao 8.71pt). Trang xuất ở tỷ lệ
+# khác thì mọi khoảng cách đổi theo -> nhân với `_scale(page)`. Không làm vậy thì
+# phóng to 2x là 4/6 dòng mất phòng đích và bị gắn nhầm thành cáp trục.
+_BASE_TEXT_H = 8.71
 _ROW_TOL = 14.0        # sai số hàng khi dóng phòng đích với dòng cáp
 _CONDUIT_MAX_DY = 20.0  # ống luồn nằm ngay dưới dòng cáp
 _CONDUIT_MAX_DX = 30.0
 
 # Khung tên chiếm góc phải-dưới; bỏ qua để không bắt nhầm chữ hành chính.
+# (Tỷ lệ phần trăm khổ giấy nên đã bất biến tỷ lệ, không cần nhân.)
 _TITLE_BLOCK = (0.75, 0.55)
+
+
+def _scale(page: fitz.Page) -> float:
+    """Tỷ lệ plot của trang so với bản vẽ chuẩn (theo chiều cao chữ trung vị)."""
+    th = text_scale(page)
+    if not th:
+        return 1.0
+    return min(6.0, max(0.25, th / _BASE_TEXT_H))
 
 
 def _body_lines(page: fitz.Page) -> list[tuple[float, float, float, str]]:
@@ -60,11 +73,11 @@ def detect_score(page: fitz.Page) -> float:
     return float(sum(1 for _, _, _, t in _body_lines(page) if _QTY_CABLE_RE.match(t)))
 
 
-def _destination(rows, y: float, x1: float) -> str:
+def _destination(rows, y: float, x1: float, s: float) -> str:
     """Nhãn phòng đích: text gần nhất bên PHẢI, cùng hàng, không phải dòng cáp."""
     best, best_dx = "", None
     for y2, x2, _x2b, t2 in rows:
-        if abs(y2 - y) > _ROW_TOL or x2 <= x1 or _QTY_CABLE_RE.match(t2):
+        if abs(y2 - y) > _ROW_TOL * s or x2 <= x1 or _QTY_CABLE_RE.match(t2):
             continue
         dx = x2 - x1
         if best_dx is None or dx < best_dx:
@@ -72,7 +85,7 @@ def _destination(rows, y: float, x1: float) -> str:
     return best
 
 
-def _conduit_by_spec(rows) -> dict[str, str]:
+def _conduit_by_spec(rows, s: float) -> dict[str, str]:
     """Bảng tra {loại cáp -> ống luồn}.
 
     Ống luồn KHÔNG in cạnh từng dòng callout mà ở phần chú thích, ngay DƯỚI dòng ghi
@@ -86,7 +99,7 @@ def _conduit_by_spec(rows) -> dict[str, str]:
         if not m:
             continue
         for y2, x2, _x2b, t2 in rows[:i][::-1]:
-            if 0 < y - y2 <= _CONDUIT_MAX_DY and abs(x2 - x0) <= _CONDUIT_MAX_DX \
+            if 0 < y - y2 <= _CONDUIT_MAX_DY * s and abs(x2 - x0) <= _CONDUIT_MAX_DX * s \
                     and "CÁP" in t2.upper():
                 out[_norm(t2)] = m.group(1).strip()
                 break
@@ -99,6 +112,7 @@ def _norm(s: str) -> str:
 
 def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
     rows = _body_lines(page)
+    s = _scale(page)
     res = TakeoffResult(page=page_index, diagram_type="cdc_elv_unit")
 
     unit = ""
@@ -109,7 +123,7 @@ def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
             break
     res.panel_name = f"Tủ điện nhẹ căn hộ {unit}".strip() if unit else "Tủ điện nhẹ căn hộ"
 
-    conduits = _conduit_by_spec(rows)
+    conduits = _conduit_by_spec(rows, s)
     n_branch = 0
     trunk_qty = 0
     for y, x0, x1, t in rows:
@@ -118,7 +132,7 @@ def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
             continue
         qty = int(m.group(1))
         spec = re.sub(r"\s+", " ", m.group(2)).strip()
-        dest = _destination(rows, y, x1)
+        dest = _destination(rows, y, x1, s)
         if dest:
             n_branch += 1
         elif "UTP" in spec.upper():

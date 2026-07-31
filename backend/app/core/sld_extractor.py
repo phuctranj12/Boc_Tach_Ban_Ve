@@ -25,6 +25,13 @@ import fitz
 from .page_text import text_dict, text_words
 
 # ----- ngưỡng cấu hình (point) -----
+# ĐO TRÊN BẢN VẼ CHUẨN (types/type1.pdf, chữ cao 7.67pt). Bản vẽ xuất ở tỷ lệ khác —
+# nhất là khi tách riêng 1 tủ sang khổ giấy riêng — thì mọi khoảng cách đổi theo, nên
+# lúc dùng phải nhân với `_page_scale(page)`. Không làm vậy thì phóng to 2x là vạch
+# chéo dài quá `slash_len_range`, không nhận được vạch nào và TOÀN BỘ dòng mất quy
+# cách cáp (vẫn ra đủ dòng nên hỏng câm). Riêng ngưỡng GÓC thì bất biến tỷ lệ.
+_BASE_TEXT_H = 7.67
+
 SLD_CFG = {
     "terminal_row_tol": 8,       # gộp các nhãn terminal cùng 1 hàng
     "route_min_len": 60,         # đường cáp ngang tối thiểu
@@ -34,7 +41,11 @@ SLD_CFG = {
     "slash_angle_range": (25, 65),  # góc vạch chéo so với phương ngang (|ang| hoặc 180-ang)
     "spec_match_x_tol": 18,      # khớp đường cáp với cột text spec theo x
     "slash_match_x_tol": 16,     # khớp vạch chéo với cột tải theo x
-    "load_terminal_x_tol": 60,   # gán tải về terminal theo x
+    # 70 chứ không phải 60: trên type1 tải SPARE cách terminal 59.1px — sát ngưỡng
+    # cũ chỉ 1.5%, nên chỉ cần ước lượng tỷ lệ lệch vài % là mất terminal. Terminal
+    # kế tiếp cách 125.8px (xa gấp 2.1 lần) nên nới tới 70 vẫn không nhập nhằng.
+    "load_terminal_x_tol": 70,   # gán tải về terminal theo x
+    "load_col_merge_x": 14,      # gộp 2 dòng Việt/Anh cùng cột thành 1 tải
 }
 
 _TERMINAL_RE = re.compile(r"^(?:L|S|P|C)\d+$|^SPARE$", re.IGNORECASE)
@@ -72,6 +83,17 @@ class SLDResult:
     debug: dict = field(default_factory=dict)
 
 
+def _page_scale(page: fitz.Page) -> float:
+    """Tỷ lệ plot của trang so với bản vẽ chuẩn (theo chiều cao chữ trung vị)."""
+    # Import trễ: takeoff/__init__ → busbar_slash → module này, import ở đầu file
+    # sẽ thành vòng tròn.
+    from .takeoff.base import text_scale
+    th = text_scale(page)
+    if not th:
+        return 1.0
+    return min(6.0, max(0.25, th / _BASE_TEXT_H))
+
+
 # ---------- trích text & line ----------
 def _collect_texts(page: fitz.Page) -> tuple[list[TextItem], list[TextItem]]:
     """Trả về (horizontal_words, vertical_lines)."""
@@ -106,7 +128,7 @@ def _collect_segments(page: fitz.Page):
 
 
 # ---------- xác định vùng SLD ----------
-def _find_sld_region(words, verticals):
+def _find_sld_region(words, verticals, s: float):
     """Vùng SLD = quanh các cột cáp '2x1C' và hàng terminal. Trả bbox (x1,y1,x2,y2)."""
     specs = [v for v in verticals if _SPEC_RE.match(v.text)]
     terms = [w for w in words if _TERMINAL_RE.match(w.text)]
@@ -115,19 +137,19 @@ def _find_sld_region(words, verticals):
     # hàng terminal phổ biến nhất (nhiều nhãn cùng y nhất)
     ys = {}
     for t in terms:
-        key = round(t.y / 6)
+        key = round(t.y / (6 * s))
         ys.setdefault(key, []).append(t)
     term_row = max(ys.values(), key=len)
     term_y = sum(t.y for t in term_row) / len(term_row)
-    x1 = min(s.x for s in specs) - 40
-    x2 = max(t.x for t in term_row) + 120
-    y1 = term_y - 220
-    y2 = max(s.y for s in specs) + 40
+    x1 = min(s2.x for s2 in specs) - 40 * s
+    x2 = max(t.x for t in term_row) + 120 * s
+    y1 = term_y - 220 * s
+    y2 = max(s2.y for s2 in specs) + 40 * s
     return (x1, y1, x2, y2), term_row, term_y
 
 
 # ---------- ghép cáp ----------
-def _build_cable_routes(segs, verticals, region):
+def _build_cable_routes(segs, verticals, region, s: float):
     (x1, y1, x2, y2) = region
     # đường ngang dài trong dải giữa terminal & tải
     horiz = []
@@ -136,7 +158,7 @@ def _build_cable_routes(segs, verticals, region):
             continue
         dx, dy = ex - sx, ey - sy
         L = math.hypot(dx, dy)
-        if L < SLD_CFG["route_min_len"]:
+        if L < SLD_CFG["route_min_len"] * s:
             continue
         ang = abs(math.degrees(math.atan2(dy, dx)))
         if ang < SLD_CFG["route_angle_tol"] or ang > 180 - SLD_CFG["route_angle_tol"]:
@@ -147,7 +169,7 @@ def _build_cable_routes(segs, verticals, region):
     for xs, xe, y, L in horiz:
         merged = False
         for r in routes:
-            if abs(r.y - y) <= SLD_CFG["route_y_merge"]:
+            if abs(r.y - y) <= SLD_CFG["route_y_merge"] * s:
                 r.x_start = min(r.x_start, xs)
                 r.x_end = max(r.x_end, xe)
                 merged = True
@@ -159,13 +181,13 @@ def _build_cable_routes(segs, verticals, region):
     specs = [v for v in verticals if _SPEC_RE.match(v.text)]
     conduits = [v for v in verticals if _CONDUIT_RE.match(v.text)]
     for r in routes:
-        spec = _nearest(specs, r.x_start, SLD_CFG["spec_match_x_tol"] * 3)
+        spec = _nearest(specs, r.x_start, SLD_CFG["spec_match_x_tol"] * 3 * s)
         if spec:
             r.cable_spec = spec.text
             m = _SIZE_RE.search(spec.text)
             if m:
                 r.size = f"{m.group(1)}mm2"
-            cond = _nearest(conduits, spec.x, 40)
+            cond = _nearest(conduits, spec.x, 40 * s)
             if cond:
                 r.conduit = cond.text
     # chỉ giữ route có spec (loại bỏ đường khung/busbar)
@@ -182,10 +204,10 @@ def _nearest(items, x, tol):
 
 
 # ---------- vạch chéo ----------
-def _find_slashes(segs, routes, region):
+def _find_slashes(segs, routes, region, s: float):
     (x1, y1, x2, y2) = region
     route_ys = [r.y for r in routes]
-    lo, hi = SLD_CFG["slash_len_range"]
+    lo, hi = (v * s for v in SLD_CFG["slash_len_range"])
     amin, amax = SLD_CFG["slash_angle_range"]
     slashes = []  # (mx, route_index)
     for sx, sy, ex, ey in segs:
@@ -201,7 +223,7 @@ def _find_slashes(segs, routes, region):
         if not (amin <= ang <= amax):
             continue
         # vạch chéo phải nằm trên 1 mức cáp (không phải mũi tên ở đỉnh tải)
-        ri = _nearest_route_index(my, route_ys, tol=5)
+        ri = _nearest_route_index(my, route_ys, tol=5 * s)
         if ri is not None:
             slashes.append((mx, ri))
     return slashes
@@ -221,7 +243,8 @@ def extract_sld(page: fitz.Page, page_index: int) -> SLDResult:
     words, verticals = _collect_texts(page)
     res = SLDResult(page=page_index)
 
-    region_info = _find_sld_region(words, verticals)
+    s = _page_scale(page)
+    region_info = _find_sld_region(words, verticals, s)
     if not region_info:
         res.debug["error"] = "Không tìm thấy vùng SLD (thiếu cột cáp '2x1C' hoặc terminal)."
         return res
@@ -230,17 +253,17 @@ def extract_sld(page: fitz.Page, page_index: int) -> SLDResult:
 
     segs = _collect_segments(page)
     # đường cáp chỉ nằm DƯỚI hàng terminal (loại busbar phía trên)
-    cable_band = (x1, term_y + 3, x2, y2)
-    routes = _build_cable_routes(segs, verticals, cable_band)
+    cable_band = (x1, term_y + 3 * s, x2, y2)
+    routes = _build_cable_routes(segs, verticals, cable_band, s)
     res.cables = routes
     if not routes:
         res.debug["error"] = "Không dựng được đường cáp ngang."
         return res
 
-    slashes = _find_slashes(segs, routes, region)
+    slashes = _find_slashes(segs, routes, region, s)
 
     # panel name (DB-...) gần góc trên-trái vùng SLD
-    panels = [w for w in words if _PANEL_RE.match(w.text) and y1 - 60 <= w.y <= term_y]
+    panels = [w for w in words if _PANEL_RE.match(w.text) and y1 - 60 * s <= w.y <= term_y]
     if panels:
         res.panel_name = min(panels, key=lambda w: w.x).text
 
@@ -252,23 +275,24 @@ def extract_sld(page: fitz.Page, page_index: int) -> SLDResult:
             continue
         if v.x < x1 or v.x > x2 or v.y < term_y:
             continue
-        if cable_xs and min(abs(v.x - cx) for cx in cable_xs) < 20:
+        if cable_xs and min(abs(v.x - cx) for cx in cable_xs) < 20 * s:
             continue
         loads.append(v)
     # gộp 2 dòng (Việt/Anh) cùng cột thành 1 tải
-    loads = _merge_load_columns(loads)
+    loads = _merge_load_columns(loads, SLD_CFG["load_col_merge_x"] * s)
 
     terms = sorted(term_row, key=lambda t: t.x)
     for ld in loads:
         # cáp: vạch chéo gần cột tải nhất
         size = spec = conduit = ""
-        cand = [(abs(mx - ld.x), ri) for mx, ri in slashes if abs(mx - ld.x) <= SLD_CFG["slash_match_x_tol"]]
+        cand = [(abs(mx - ld.x), ri) for mx, ri in slashes
+                if abs(mx - ld.x) <= SLD_CFG["slash_match_x_tol"] * s]
         if cand:
             ri = min(cand)[1]
             r = routes[ri]
             size, spec, conduit = r.size, r.cable_spec, r.conduit
         # terminal (roadName)
-        term = _nearest(terms, ld.x, SLD_CFG["load_terminal_x_tol"])
+        term = _nearest(terms, ld.x, SLD_CFG["load_terminal_x_tol"] * s)
         road = term.text.upper() if term else ""
         is_spare = "SPARE" in ld.text.upper() or "DỰ PHÒNG" in ld.text.upper()
         if is_spare:
@@ -296,7 +320,7 @@ def extract_sld(page: fitz.Page, page_index: int) -> SLDResult:
     return res
 
 
-def _merge_load_columns(loads, x_tol=14):
+def _merge_load_columns(loads, x_tol):
     """Gộp các dòng text dọc cùng cột (vd tên Việt + Anh) thành 1 tải."""
     loads = sorted(loads, key=lambda v: v.x)
     out: list[TextItem] = []

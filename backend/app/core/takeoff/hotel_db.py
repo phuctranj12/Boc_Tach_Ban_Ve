@@ -171,10 +171,26 @@ def _nearest(src: TextItem, pool: list[TextItem], max_d: float = math.inf):
 # Lộ và nhãn PHA của nó căn thẳng hàng: khoảng cách y chỉ ~0-19px (đo trên type3).
 # Ngoài dải này gần như chắc chắn là bám nhầm.
 _PHASE_ALIGN_TOL = 22.0
+# Pha nằm cùng cụm MCB với lộ nên không bao giờ xa quá dải này theo x (đo type3).
+_PHASE_X_MAX = 450.0
+
+
+# Dải coi như "bản vẽ ở tỷ lệ chuẩn". Đo trên 28 trang type3: chiều cao chữ trung vị
+# dao động 9.69–10.37px (≤7%) dù mọi trang cùng khổ giấy 3370x2384 và cùng bước pha
+# 15.5px — tức bản vẽ KHÔNG to hơn, chỉ là trang trộn nhiều cỡ chữ làm trung vị lệch.
+# Ngưỡng ngắn lệch 7% thì vô hại, nhưng ngưỡng 450px (dài ngang cả sơ đồ) thì 7% đủ
+# đổi kết quả ghép pha. Nên với ngưỡng TẦM XA, mọi ước lượng trong dải này coi là 1.0;
+# bản vẽ bị phóng/thu THẬT luôn lệch xa hơn nhiều (tách 1 tủ ra khổ khác: ≥25%).
+_NOMINAL_BAND = (0.90, 1.11)
+
+
+def _far_scale(s: float) -> float:
+    """Tỷ lệ dùng cho ngưỡng TẦM XA — bỏ qua nhiễu đo quanh tỷ lệ chuẩn."""
+    return 1.0 if _NOMINAL_BAND[0] <= s <= _NOMINAL_BAND[1] else s
 
 
 def _match_one_to_one(loads: list[TextItem], phases: list[TextItem],
-                      tol: float) -> dict[int, TextItem]:
+                      tol: float, x_max: float) -> dict[int, TextItem]:
     """Gán mỗi lộ ĐÚNG một nhãn pha, mỗi pha chỉ thuộc MỘT lộ (1 pole = 1 mạch).
 
     Vì sao KHÔNG dùng 'mỗi lộ giành pha gần nhất': khi một lộ không có pha thẳng
@@ -186,7 +202,7 @@ def _match_one_to_one(loads: list[TextItem], phases: list[TextItem],
     pairs = []
     for i, l in enumerate(loads):
         for j, p in enumerate(phases):
-            if abs(l.y - p.y) <= tol and abs(l.x - p.x) <= 450:
+            if abs(l.y - p.y) <= tol and abs(l.x - p.x) <= x_max:
                 pairs.append((_dist(l, p), i, j))
     pairs.sort()
     used_l: set[int] = set()
@@ -401,10 +417,13 @@ def _build_cbs(verts: list[TextItem], s: float = 1.0) -> list[dict]:
 
 # ---- lõi tách rời nguồn ----
 def extract_items(words: list[TextItem], hlines: list[TextItem],
-                  vlines: list[TextItem], s: float = 1.0) -> list[TakeoffItem]:
+                  vlines: list[TextItem], s: float = 1.0,
+                  s_far: float | None = None) -> list[TakeoffItem]:
     """words = chữ NGANG rời (cho nhãn tủ); hlines = chữ NGANG đã gộp theo dòng
     (cho cáp/earth/power/tải — là CÂU hoàn chỉnh); vlines = chữ DỌC (CB/số mạch).
-    `s` = tỷ lệ bản vẽ (chiều-cao-chữ / baseline) → mọi ngưỡng khoảng cách ×s."""
+    `s` = tỷ lệ bản vẽ (chiều-cao-chữ / baseline) → mọi ngưỡng khoảng cách ×s.
+    `s_far` = tỷ lệ dùng riêng cho ngưỡng TẦM XA (xem `_font_scale`); mặc định = s."""
+    s_far = s if s_far is None else s_far
     cables = [t for t in hlines if is_cable_c(t.text)]
     earths = [t for t in hlines if _EARTH_LINE_RE.match(t.text)]
     powers = [t for t in hlines if _POWER_RE.search(t.text)]
@@ -453,7 +472,7 @@ def extract_items(words: list[TextItem], hlines: list[TextItem],
     load_tokens = [a[0] for a in anchors]
     non_motor_idx = [i for i, a in enumerate(anchors) if not a[2]]
     phase_of_sub = _match_one_to_one([load_tokens[i] for i in non_motor_idx],
-                                     phases, _PHASE_ALIGN_TOL * s)
+                                     phases, _PHASE_ALIGN_TOL * s, _PHASE_X_MAX * s_far)
     phase_of = {non_motor_idx[k]: v for k, v in phase_of_sub.items()}
 
     rows: list[tuple] = []       # (sort_key, TakeoffItem) — sắp lại để cùng cụm liền nhau
@@ -561,7 +580,7 @@ def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
     th = text_scale(page)
     s = min(4.0, max(0.5, th / _BASE_TEXT_H)) if th else 1.0
     res = TakeoffResult(page=page_index, diagram_type="hotel_db")
-    res.items = extract_items(words, hlines, vlines, s)
+    res.items = extract_items(words, hlines, vlines, s, _far_scale(s))
     from collections import Counter
     c = Counter(it.panelName for it in res.items if it.panelName)
     res.panel_name = c.most_common(1)[0][0] if c else ""

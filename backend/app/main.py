@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
@@ -35,6 +35,14 @@ app.include_router(sheet_config_router)
 # nên asset của nó nằm ở /json-to-sheet/assets, không đụng /assets của giao diện
 # bóc tách. Cũng phải mount trước catch-all SPA bên dưới.
 if SHEET_CONFIG_WEB.is_dir():
+
+    # Mount chỉ khớp khi có dấu / cuối. Không có route này thì "/json-to-sheet"
+    # rơi xuống catch-all SPA bên dưới và trả về giao diện bóc tách. Cơ chế tự
+    # thêm dấu / của Starlette không cứu được, vì catch-all đã khớp trước.
+    @app.get("/json-to-sheet", include_in_schema=False)
+    def _sheet_config_web_slash():
+        return RedirectResponse("/json-to-sheet/")
+
     app.mount(
         "/json-to-sheet",
         StaticFiles(directory=SHEET_CONFIG_WEB, html=True),

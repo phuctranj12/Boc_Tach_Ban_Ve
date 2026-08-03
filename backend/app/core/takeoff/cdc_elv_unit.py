@@ -33,6 +33,13 @@ _QTY_CABLE_RE = re.compile(r"^(\d+)\s*x\s*(CÁP\s+.+)$", re.IGNORECASE)
 _CONDUIT_RE = re.compile(r"^\(\s*(ỐNG\s+[^)]+)\)$", re.IGNORECASE)
 # Mã căn hộ trong tiêu đề bảng: "CHI TIẾT TỦ ĐIỆN NHẸ CĂN HỘ CH01"
 _UNIT_RE = re.compile(r"CĂN\s+HỘ\s+(CH\d+[A-Z]?)", re.IGNORECASE)
+# KHÔNG phải phòng đích: tên cáp/ống và ghi chú trong ngoặc ("(LẮP TRÊN TRẦN GIẢ)").
+# Phòng đích là NHÃN NƠI ĐẾN, nên loại thẳng các dòng này — nếu không, lúc trang bị
+# xoay sai hướng chúng lọt vào làm "phòng đích" và qua mặt trọng tài chọn hướng.
+_NOT_DEST_RE = re.compile(r"^\(|CÁP|ỐNG", re.IGNORECASE)
+# roadName của dòng KHÔNG có phòng đích (tuyến trục vào căn hộ) — cũng là mốc để
+# `quality` đếm số dòng gắn được đích.
+_TRUNK_ROAD = "Trục"
 
 # Ngưỡng đo trên bản vẽ CHUẨN (02.DIEN NHE.pdf, chữ cao 8.71pt). Trang xuất ở tỷ lệ
 # khác thì mọi khoảng cách đổi theo -> nhân với `_scale(page)`. Không làm vậy thì
@@ -73,11 +80,22 @@ def detect_score(page: fitz.Page) -> float:
     return float(sum(1 for _, _, _, t in _body_lines(page) if _QTY_CABLE_RE.match(t)))
 
 
+def quality(res) -> int:
+    """Số dòng gắn được PHÒNG ĐÍCH — thước đo chọn hướng xoay của loại này.
+
+    Không dùng thước mặc định (đếm lộ có tiết diện mm2) vì cáp điện nhẹ không ghi
+    mm2: mọi hướng đều 0 điểm, trọng tài không phân biệt được và giữ nguyên hướng
+    sai. Phòng đích dóng theo phương NGANG bên phải dòng cáp nên xoay sai là rụng
+    (đo trang CH: đúng hướng 4/6, ba hướng còn lại 0–2)."""
+    return sum(1 for it in res.items if it.roadName != _TRUNK_ROAD)
+
+
 def _destination(rows, y: float, x1: float, s: float) -> str:
     """Nhãn phòng đích: text gần nhất bên PHẢI, cùng hàng, không phải dòng cáp."""
     best, best_dx = "", None
     for y2, x2, _x2b, t2 in rows:
-        if abs(y2 - y) > _ROW_TOL * s or x2 <= x1 or _QTY_CABLE_RE.match(t2):
+        if (abs(y2 - y) > _ROW_TOL * s or x2 <= x1
+                or _QTY_CABLE_RE.match(t2) or _NOT_DEST_RE.search(t2)):
             continue
         dx = x2 - x1
         if best_dx is None or dx < best_dx:
@@ -140,7 +158,7 @@ def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
 
         res.items.append(TakeoffItem(
             panelName=res.panel_name,
-            roadName=dest or "Trục",
+            roadName=dest or _TRUNK_ROAD,
             # Không có phòng đích => tuyến trục từ tủ tầng vào căn hộ.
             loadName=dest or "Tuyến trục từ tủ tầng đến căn hộ",
             size=parse_size(spec),      # cáp điện nhẹ không ghi mm2 -> thường rỗng

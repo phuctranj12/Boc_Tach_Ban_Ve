@@ -172,21 +172,12 @@ def _nearest(src: TextItem, pool: list[TextItem], max_d: float = math.inf):
 # Ngoài dải này gần như chắc chắn là bám nhầm.
 _PHASE_ALIGN_TOL = 22.0
 # Pha nằm cùng cụm MCB với lộ nên không bao giờ xa quá dải này theo x (đo type3).
+# Đây là ngưỡng NHẠY nhất của module: đo trên 28 trang type3, |dx| của cặp lộ–pha
+# THẬT dồn ở 250–400px với đuôi tới ~550, rác bắt đầu từ ~1000 — 450 nằm trong đuôi
+# nên xê dịch ±10% đổi 143–212 dòng. Vì vậy tỷ lệ `s` nhân vào đây phải đo cho đúng,
+# đừng bù bằng cách nới ngưỡng. (Nhiễu trung vị chiều cao chữ ±7% chỉ xảy ra ở 2/28
+# trang và tốn đúng 1 dòng — rẻ hơn nhiều so với việc coi bản vẽ 1.1x là tỷ lệ chuẩn.)
 _PHASE_X_MAX = 450.0
-
-
-# Dải coi như "bản vẽ ở tỷ lệ chuẩn". Đo trên 28 trang type3: chiều cao chữ trung vị
-# dao động 9.69–10.37px (≤7%) dù mọi trang cùng khổ giấy 3370x2384 và cùng bước pha
-# 15.5px — tức bản vẽ KHÔNG to hơn, chỉ là trang trộn nhiều cỡ chữ làm trung vị lệch.
-# Ngưỡng ngắn lệch 7% thì vô hại, nhưng ngưỡng 450px (dài ngang cả sơ đồ) thì 7% đủ
-# đổi kết quả ghép pha. Nên với ngưỡng TẦM XA, mọi ước lượng trong dải này coi là 1.0;
-# bản vẽ bị phóng/thu THẬT luôn lệch xa hơn nhiều (tách 1 tủ ra khổ khác: ≥25%).
-_NOMINAL_BAND = (0.90, 1.11)
-
-
-def _far_scale(s: float) -> float:
-    """Tỷ lệ dùng cho ngưỡng TẦM XA — bỏ qua nhiễu đo quanh tỷ lệ chuẩn."""
-    return 1.0 if _NOMINAL_BAND[0] <= s <= _NOMINAL_BAND[1] else s
 
 
 def _match_one_to_one(loads: list[TextItem], phases: list[TextItem],
@@ -417,13 +408,11 @@ def _build_cbs(verts: list[TextItem], s: float = 1.0) -> list[dict]:
 
 # ---- lõi tách rời nguồn ----
 def extract_items(words: list[TextItem], hlines: list[TextItem],
-                  vlines: list[TextItem], s: float = 1.0,
-                  s_far: float | None = None) -> list[TakeoffItem]:
+                  vlines: list[TextItem], s: float = 1.0) -> list[TakeoffItem]:
     """words = chữ NGANG rời (cho nhãn tủ); hlines = chữ NGANG đã gộp theo dòng
     (cho cáp/earth/power/tải — là CÂU hoàn chỉnh); vlines = chữ DỌC (CB/số mạch).
-    `s` = tỷ lệ bản vẽ (chiều-cao-chữ / baseline) → mọi ngưỡng khoảng cách ×s.
-    `s_far` = tỷ lệ dùng riêng cho ngưỡng TẦM XA (xem `_font_scale`); mặc định = s."""
-    s_far = s if s_far is None else s_far
+    `s` = tỷ lệ bản vẽ (chiều-cao-chữ / baseline) → MỌI ngưỡng khoảng cách ×s, kể cả
+    ngưỡng tầm xa (ghép pha) — không còn dải "coi như tỷ lệ chuẩn" nào."""
     cables = [t for t in hlines if is_cable_c(t.text)]
     earths = [t for t in hlines if _EARTH_LINE_RE.match(t.text)]
     powers = [t for t in hlines if _POWER_RE.search(t.text)]
@@ -472,7 +461,7 @@ def extract_items(words: list[TextItem], hlines: list[TextItem],
     load_tokens = [a[0] for a in anchors]
     non_motor_idx = [i for i, a in enumerate(anchors) if not a[2]]
     phase_of_sub = _match_one_to_one([load_tokens[i] for i in non_motor_idx],
-                                     phases, _PHASE_ALIGN_TOL * s, _PHASE_X_MAX * s_far)
+                                     phases, _PHASE_ALIGN_TOL * s, _PHASE_X_MAX * s)
     phase_of = {non_motor_idx[k]: v for k, v in phase_of_sub.items()}
 
     rows: list[tuple] = []       # (sort_key, TakeoffItem) — sắp lại để cùng cụm liền nhau
@@ -578,9 +567,13 @@ def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
     # TỶ LỆ bản vẽ: chiều-cao-chữ / baseline (9.7px). File hiện tại → s=1 (không đổi
     # kết quả); bản vẽ cỡ/tỷ lệ khác → mọi ngưỡng khoảng cách tự co giãn theo s.
     th = text_scale(page)
-    s = min(4.0, max(0.5, th / _BASE_TEXT_H)) if th else 1.0
+    # Chặn trên/dưới chỉ để một trang hỏng chữ không thổi ngưỡng đi vô hạn — KHÔNG
+    # phải giới hạn tỷ lệ hỗ trợ. Chặn dưới phải đủ thấp: kẹp s cao hơn tỷ lệ thật là
+    # nới lỏng mọi ngưỡng, khiến trang XOAY SAI HƯỚNG vẫn gắn được cáp và qua mặt
+    # trọng tài chọn hướng (xem takeoff/__init__.py).
+    s = min(8.0, max(0.15, th / _BASE_TEXT_H)) if th else 1.0
     res = TakeoffResult(page=page_index, diagram_type="hotel_db")
-    res.items = extract_items(words, hlines, vlines, s, _far_scale(s))
+    res.items = extract_items(words, hlines, vlines, s)
     from collections import Counter
     c = Counter(it.panelName for it in res.items if it.panelName)
     res.panel_name = c.most_common(1)[0][0] if c else ""

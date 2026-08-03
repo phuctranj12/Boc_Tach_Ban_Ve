@@ -80,20 +80,56 @@ class TakeoffResult:
 # ---------- tiện ích đọc PDF dùng chung ----------
 # Mọi hàm dưới đây đọc text qua page_text.* để cả 4 extractor dùng chung một lượt
 # parse cho mỗi trang (xem app/core/page_text.py).
+# Cửa sổ chiều cao chữ "hợp lệ" ở cỡ in thường: dưới 2px là vệt/artifact, trên 40px
+# là chữ tiêu đề khung tên. Cửa sổ TUYỆT ĐỐI này chỉ đúng quanh tỷ lệ 1 — xem
+# `text_scale` để biết cách nhận ra lúc nó hết đúng.
+_H_MIN, _H_MAX = 2.0, 40.0
+
+
+def _robust_median(hs: list[float]) -> float:
+    """Trung vị 2 vòng, KHÔNG dùng mốc px tuyệt đối nào: lấy trung vị thô rồi chỉ
+    giữ các giá trị quanh nó (¼×…4×) và lấy trung vị lại. Nhờ không có hằng số px,
+    hàm này đúng ở MỌI tỷ lệ; đổi lại nó nhạy hơn với trang trộn nhiều cỡ chữ nên
+    chỉ dùng làm phương án dự phòng."""
+    import statistics
+    if not hs:
+        return 0.0
+    m0 = statistics.median(hs)
+    keep = [h for h in hs if 0.25 * m0 <= h <= 4 * m0]
+    return statistics.median(keep) if keep else m0
+
+
 def text_scale(page: fitz.Page) -> float:
     """Chiều cao chữ TRUNG VỊ (px) — proxy TỶ LỆ plot của bản vẽ (ổn định theo tỷ
     lệ, không phụ thuộc mật độ nội dung). Dùng để tự suy các ngưỡng khoảng cách
-    (extractor calibrate ở baseline rồi nhân theo tỷ lệ này)."""
+    (extractor calibrate ở baseline rồi nhân theo tỷ lệ này).
+
+    BẤT BIẾN TỶ LỆ: cửa sổ lọc (2..40px) là mốc TUYỆT ĐỐI nên tự nó chỉ đúng trong
+    khoảng ~0.25x–4x. Ngoài dải đó nó cắt cụt phân bố và trả về tỷ lệ SAI (bản vẽ
+    phóng 5x: mọi chữ >40px bị loại, chỉ còn vài chữ nhỏ sót → tưởng là bản vẽ
+    thường). Nhận ra tình huống này bằng chính kết quả: trung vị nằm sát mép cửa sổ
+    ⇒ cửa sổ đang cắt vào phân bố ⇒ đo lại bằng cách KHÔNG có mốc tuyệt đối.
+
+    ĐÃ THỬ và BỎ: thêm mốc "số chữ bị loại vì quá to > số chữ lọt cửa sổ". Nó bắt
+    thêm được vài ca phóng ≥6x, nhưng trên trang BỊ XOAY thì chữ dọc được PyMuPDF
+    báo chiều cao span bằng ĐỘ DÀI cả dòng ⇒ mốc đó bắn nhầm và làm hỏng việc chọn
+    hướng. Nếu cần nới đầu trên, hãy đo trên CHIỀU NGANG của glyph chứ đừng đếm span.
+    """
     import statistics
-    hs = []
+    hs_all = []
     for b in _text_dict(page)["blocks"]:
         for l in b.get("lines", []):
             for s in l["spans"]:
                 bb = s["bbox"]
                 h = abs(bb[3] - bb[1])
-                if 2 < h < 40:
-                    hs.append(h)
-    return statistics.median(hs) if hs else 0.0
+                if h > 0:
+                    hs_all.append(h)
+    hs = [h for h in hs_all if _H_MIN < h < _H_MAX]
+    if hs:
+        m = statistics.median(hs)
+        if _H_MIN * 1.2 < m < _H_MAX * 0.85:      # cửa sổ chưa chạm phân bố → tin
+            return m
+    return _robust_median(hs_all)
 
 
 def result_quality(res: "TakeoffResult") -> int:

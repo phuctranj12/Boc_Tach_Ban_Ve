@@ -260,8 +260,11 @@ Ví dụ thật (loai_2.takeoff.json):
   "power": "6000", "cb": "MCB 3P 32A 6kA", "size": "6mm2",
   "cableSpec": "CU/PVC 3X(1X6MM2) +1X6MM2 +1X6MM2(E)", "conduit": "ỐNG PVC D25" }
 ```
-Ngoài lộ thường, tủ con (`TĐTM-x`) cũng là 1 cột → thêm 1 dòng **feeder** (vì tủ con
-cũng cần dây). Tủ tổng (`TĐ-Tx`) gom riêng vào `panels` kèm P/Ptt/Kđt:
+Ngoài lộ thường, **tủ con** cũng là 1 cột → thêm 1 dòng **feeder** (vì tủ con cũng cần
+dây). **Tủ tổng** gom riêng vào `panels` kèm P/Ptt/Kđt. Phân biệt tủ tổng/tủ con **không
+đọc tên** (`TĐ-Tx` / `TĐTM-x` chỉ là cách đặt tên của một bộ hồ sơ) mà theo **bằng chứng
+trên bản vẽ**: có ô P/Ptt/Kđt cạnh nhãn → tủ tổng; phía trên nhãn có cột cáp cấp nguồn →
+tủ con (`_panel_kind`):
 ```json
 { "name": "TĐ-T1", "kind": "main", "power": "64000", "ptt": "38400", "kdt": "0.60" }
 ```
@@ -283,6 +286,34 @@ mép trái cụm nhất" — đây là heuristic ★★, dễ sai nếu bố c�
    xem chúng có thật sự thẳng hàng / có dây nối không.
 5. **Human-in-the-loop**: UI duyệt theo trang (xem [§6](#6-duyệt-sửa--xuất-boq)) chính
    là để con người xác nhận các liên kết ★★/★ trước khi xuất BOQ.
+
+### 4.5 Bất biến **tỷ lệ** và **hướng** — hợp đồng chung của mọi extractor
+
+Mọi ngưỡng khoảng cách đều đo trên MỘT bản vẽ chuẩn. Khách gửi bản vẽ xuất ở tỷ lệ khác
+(tách 1 tủ ra khổ giấy riêng) thì mọi khoảng cách point đổi theo, nên extractor phải:
+
+1. **Đo tỷ lệ ngay trên trang** — `base.text_scale()` (chiều cao chữ trung vị) và, với
+   `panel_table`, thêm mốc hình học `_pitch` (bước cột). Ngưỡng dùng = ngưỡng chuẩn × tỷ lệ.
+2. **Không có "dải coi như tỷ lệ chuẩn"**: từng có dải ±10% ép mọi ước lượng gần 1 về
+   đúng 1.0 để né nhiễu đo, hậu quả là bản vẽ phóng thật 1.1x bị coi là 1.0. Đã bỏ —
+   nhiễu đo chỉ tốn 1 dòng/2820 trên bộ mẫu, rẻ hơn nhiều so với đo sai tỷ lệ thật.
+3. **Chặn trên/dưới của tỷ lệ chỉ để chống trang hỏng chữ**, không phải giới hạn hỗ trợ.
+   Kẹp tỷ lệ CAO hơn thật là nới lỏng mọi ngưỡng → trang xoay sai hướng vẫn gắn được cáp
+   và qua mặt trọng tài chọn hướng (đây từng là lỗi thật ở 0.3–0.4x kèm xoay 270°).
+4. **Chọn hướng bằng CHẤT LƯỢNG kết quả**, không bằng số dòng: mặc định đếm lộ có tiết
+   diện `size`. Loại bản vẽ mà cáp không ghi mm2 (điện nhẹ UTP/quang) phải tự khai hàm
+   `quality(res)` riêng, nếu không trọng tài mù và giữ nguyên hướng sai.
+
+Dải **đã kiểm chứng** (kết quả trùng khít bản gốc, ở cả 4 hướng 0/90/180/270°):
+
+| Kiểu | Dải tỷ lệ | Chỗ hụt & lý do |
+|---|---|---|
+| `panel_table`, `hotel_db` | 0.25x – 5x | — |
+| `busbar_slash` | 0.25x – 3x | từ ~5x, `sld_extractor.py` đo hụt tỷ lệ ~20% → dư 1 dòng |
+| `cdc_elv_unit` | 0.5x – 5x | dưới 0.5x mà ĐỒNG THỜI xoay 90° thì rụng dòng cáp |
+
+Chạy lại bằng `python3 scripts/test_takeoff_scale.py` (thêm `--full` để quét cả ngoài
+dải — phần ngoài dải chỉ báo, không tính FAIL).
 
 ---
 

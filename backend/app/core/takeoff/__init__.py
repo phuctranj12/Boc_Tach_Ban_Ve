@@ -4,6 +4,9 @@ Thêm một kiểu bản vẽ mới = thêm 1 module có 2 hàm:
     detect_score(page) -> float        # điểm khả năng khớp kiểu này
     extract(page, page_index) -> TakeoffResult
 
+và (TUỲ CHỌN) hàm thứ 3 khi loại bản vẽ đó không hợp với thước đo mặc định:
+    quality(res) -> int                # số dòng bóc ĐÚNG, thang 0..len(items)
+
 rồi đăng ký vào EXTRACTORS. Phần còn lại (auto-detect, API, frontend, BOQ) không
 phải sửa.
 """
@@ -23,6 +26,16 @@ EXTRACTORS = {
     "mep_tray": mep_floorplan,
     "cdc_elv_unit": cdc_elv_unit,
 }
+
+
+def quality(res: TakeoffResult) -> int:
+    """Điểm CHẤT LƯỢNG dùng để chọn hướng xoay. Mặc định đếm lộ có 'size' (bóc sai
+    hướng ⇒ cáp không gắn được ⇒ size rỗng). Loại bản vẽ mà cáp KHÔNG ghi tiết diện
+    (vd điện nhẹ: UTP/quang) thì thước đo đó luôn = 0 ở mọi hướng, trọng tài hoá mù
+    — nên module tự khai `quality` riêng."""
+    mod = EXTRACTORS.get(res.diagram_type)
+    fn = getattr(mod, "quality", None) if mod else None
+    return fn(res) if fn else result_quality(res)
 
 
 def detect_type(page: fitz.Page) -> tuple[str, dict]:
@@ -65,7 +78,7 @@ def extract_takeoff(page: fitz.Page, page_index: int, kind: str = "auto") -> Tak
     # cáp) — đúng hướng thì cáp gắn được. KHÁC bản cũ ("có lộ là nhận"): tránh nhận
     # nhầm kết quả RÁC khi bản vẽ bị xoay (hotel_db ở hướng sai ra nhiều lộ nhưng 0 cáp).
     res0 = _extract_core(page, page_index, "auto")
-    q0 = result_quality(res0)
+    q0 = quality(res0)
     if res0.items and q0 >= 0.6 * len(res0.items):
         res0.debug["rotation"] = 0
         return res0
@@ -80,7 +93,7 @@ def extract_takeoff(page: fitz.Page, page_index: int, kind: str = "auto") -> Tak
         finally:
             if holder is not None:
                 holder.close()
-        key = (result_quality(res), len(res.items))
+        key = (quality(res), len(res.items))
         if key > best[2]:
             best = (res, rot, key)
 

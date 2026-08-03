@@ -29,9 +29,24 @@ from .base import (
 
 # số mạch / lộ làm neo cột
 _REF_RE = re.compile(r"^(?:S\d+|FCU\s*\d+|SS\d+\.\d+|P\d+|L\d+|C\d+|H\d+)$", re.IGNORECASE)
-# nhãn tủ (panel) để gán panelName
-_PANEL_RE = re.compile(r"^(?:TĐ[-\s]?T?M?\d|TĐTM-?\d|TĐ-?T\d|MSB|MDB|DB[-/]\S+)", re.IGNORECASE)
+# Nhãn tủ (panel) để gán panelName. KHÔNG khoá theo cách đặt tên của một bộ hồ sơ:
+# nhận theo DẠNG mã tủ = tiền tố quy ước (Việt: TĐ/TỦ ĐIỆN/TD/TU — Anh: DB/MSB/MDB/
+# LP/PP/ATS/MCC/LCP...) + mã/số. Nhờ vậy TĐTM-1, TĐ-T2, TĐ-P3, DB-01, LP2, MSB đều
+# vào; còn phân biệt tủ TỔNG hay tủ CON thì KHÔNG đoán qua tên nữa (xem `_panel_kind`).
+_PANEL_RE = re.compile(
+    r"^(?:"
+    r"(?:TỦ\s*ĐIỆN|TĐ|TD|TU)[-\s./]?[A-ZĐ0-9\-./ ]{0,6}\d"
+    # (?![A-ZÀ-ỹ]) = mã tủ dừng ở đây, không phải đầu một từ dài hơn ("LPG", "PPHÒNG")
+    r"|(?:MSB|MDB|EMDB|SMDB|DB|SB|LP|PP|ATS|MCC|LCP)(?![A-ZÀ-ỹ])(?:[-/.\s]\S+|\d[A-Z0-9.]*)?"
+    r")", re.IGNORECASE)
 _TITLE_SKIP = re.compile(r"TỦ ĐIỆN|TẦNG|SMARTHOME|SƠ ĐỒ|DIỄN GIẢI|LOẠI CÁP|CÔNG SUẤT", re.IGNORECASE)
+
+
+def _is_panel_label(t: str) -> bool:
+    """Nhãn tủ? Loại SỐ MẠCH (P1/L1/C1... cũng khớp dạng 'chữ + số') và các dòng
+    tiêu đề/diễn giải — hai nguồn nhầm lẫn duy nhất khi nới rộng `_PANEL_RE`."""
+    return bool(_PANEL_RE.match(t)) and not _REF_RE.match(t) and not _TITLE_SKIP.search(t)
+
 
 # Hai mốc calibrate của bản vẽ CHUẨN (types/type2.pdf). Trang ở tỷ lệ khác chỉ
 # việc nhân ngưỡng lên — xem `_scales()`.
@@ -111,10 +126,9 @@ def _cfg(sx: float, sy: float) -> dict:
 
 _POWER_RE = re.compile(r"^\d{2,6}$")           # số công suất (W)
 _CB_RE = re.compile(r"^(?:MCB|MCCB|RCBO|RCCB|ELCB|\d+P|\d+A|\d+mA|\d+kA)$", re.IGNORECASE)
-# tủ tổng TĐ-Tx (có P/Ptt/Kđt) và tủ con smarthome TĐTM-x (có công suất feeder)
-_MAIN_PANEL_RE = re.compile(r"^TĐ-?T\d$", re.IGNORECASE)
-_SUB_PANEL_RE = re.compile(r"^TĐTM-?\d$", re.IGNORECASE)
 _PNUM_RE = re.compile(r"(\d[\d.]*)")
+# Ô ghi thông số tủ tổng: "P: 64000", "Ptt: 38400", "Kđt: 0.6"
+_PTT_RE = re.compile(r"^\s*(?:P|Ptt|Kđt|Kdt)\s*[:=]", re.IGNORECASE)
 
 
 def _is_cable(t: str) -> bool:
@@ -159,8 +173,10 @@ def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
     sx, sy = _scales(page, refs)
     cfg = _cfg(sx, sy)
 
-    panels = [t for t in (horiz + verts)
-              if _PANEL_RE.match(t.text) and not _TITLE_SKIP.search(t.text)]
+    panels = [t for t in (horiz + verts) if _is_panel_label(t.text)]
+    # Nhãn tủ ghi NGANG mới có thể mang ô thông số/cột cấp nguồn → chỉ phân loại nhóm này.
+    labels = [t for t in horiz if _is_panel_label(t.text)]
+    kinds = {id(t): _panel_kind(t, horiz, verts, cfg) for t in labels}
 
     # Gán tủ THEO CỤM cột (chính xác hơn nearest từng item): mỗi section có vài
     # cụm cột tách nhau bởi khoảng trống; cả cụm dùng chung 1 tên tủ.
@@ -203,17 +219,15 @@ def extract(page: fitz.Page, page_index: int) -> TakeoffResult:
         res.items.append(item)
 
     res.panel_name = _dominant(res.items)
-    res.panels = _collect_panels(horiz, cfg)
+    res.panels = _collect_panels(labels, kinds, horiz, verts, cfg)
 
-    # CHÍNH TỦ con (TĐTM-x) cũng là 1 cột trong ma trận (neo bởi nhãn tủ): có
-    # MCB đầu nguồn, cáp cấp nguồn, ống luồn, công suất. Tủ con cần dây nên phải
-    # vào BOQ -> thêm 1 dòng feeder đầu mỗi nhóm (giữ nguyên cách gom tủ).
+    # CHÍNH TỦ con cũng là 1 cột trong ma trận (neo bởi nhãn tủ): có MCB đầu nguồn,
+    # cáp cấp nguồn, ống luồn, công suất. Tủ con cần dây nên phải vào BOQ -> thêm 1
+    # dòng feeder đầu mỗi nhóm (giữ nguyên cách gom tủ).
     feeders = []
-    for ref in [t for t in horiz if _SUB_PANEL_RE.match(t.text)]:
+    for ref in [t for t in labels if kinds[id(t)] == "sub"]:
         name = _norm(ref.text).upper()
-        col = [v for v in verts
-               if abs(v.x - ref.x) <= cfg["col_x_tol"]
-               and ref.y - cfg["col_y_up"] <= v.y <= ref.y - cfg["col_y_gap"]]
+        col = _panel_column(ref, verts, cfg)
         col.sort(key=lambda v: v.y)
         cable_parts = [v.text for v in col if _is_cable(v.text)]
         conduit = next((v.text for v in col if _is_conduit(v.text)), "")
@@ -263,37 +277,72 @@ def _pick_cb(hcol) -> str:
     return _norm(" ".join(t.text for t in toks))
 
 
-def _collect_panels(horiz, cfg) -> list[dict]:
+def _spec_cell(a, horiz, cfg) -> list:
+    """Các ô text nằm ngay cạnh nhãn tủ (nơi ghi P/Ptt/Kđt của tủ tổng)."""
+    return [h for h in horiz
+            if abs(h.x - a.x) <= cfg["panel_near_x"]
+            and a.y - cfg["panel_near_up"] <= h.y <= a.y + cfg["panel_near_dn"]]
+
+
+def _panel_column(a, verts, cfg) -> list:
+    """Cột text dọc phía trên nhãn tủ (cáp/ống cấp nguồn cho tủ, nếu tủ là 1 cột)."""
+    return [v for v in verts
+            if abs(v.x - a.x) <= cfg["col_x_tol"]
+            and a.y - cfg["col_y_up"] <= v.y <= a.y - cfg["col_y_gap"]]
+
+
+def _panel_kind(a, horiz, verts, cfg) -> str:
+    """Tủ TỔNG hay tủ CON — quyết định bằng BẰNG CHỨNG trên bản vẽ, không bằng tên.
+
+    Bản cũ đọc tên: '^TĐ-T\\d$' là tổng, '^TĐTM-\\d$' là con — chỉ đúng với đúng một
+    bộ hồ sơ. Thực chất hai loại khác nhau ở thứ được VẼ kèm:
+      - tủ TỔNG có ô thông số phụ tải P/Ptt/Kđt bên cạnh;
+      - tủ CON là MỘT CỘT trong ma trận nên phía trên nó có cáp cấp nguồn → cần
+        thêm dòng feeder vào BOQ.
+    Kiểm trên type2: 3/3 tủ tổng có P/Ptt/Kđt và không có cáp; 3/3 tủ con thì ngược
+    lại — hai dấu hiệu tách sạch, không cần biết bộ hồ sơ đặt tên thế nào.
+    """
+    if any(_PTT_RE.match(h.text) or "KĐT" in h.text.upper().replace(" ", "")
+           for h in _spec_cell(a, horiz, cfg)):
+        return "main"
+    if any(_is_cable(v.text) for v in _panel_column(a, verts, cfg)):
+        return "sub"
+    return ""
+
+
+def _collect_panels(labels, kinds, horiz, verts, cfg) -> list[dict]:
     """Thông tin tủ kèm công suất:
-       - Tủ tổng TĐ-Tx: P, Ptt, Kđt (text gần nhãn).
-       - Tủ con smarthome TĐTM-x: công suất = số (W) thẳng cột với nhãn (dòng feeder).
+       - Tủ tổng: P, Ptt, Kđt (text ghi cạnh nhãn).
+       - Tủ con: công suất = số (W) thẳng cột với nhãn (dòng feeder).
     """
     out = []
     nums = [h for h in horiz if _POWER_RE.match(h.text)]
 
-    for a in [h for h in horiz if _MAIN_PANEL_RE.match(h.text)]:
-        near = [h for h in horiz
-                if abs(h.x - a.x) <= cfg["panel_near_x"]
-                and a.y - cfg["panel_near_up"] <= h.y <= a.y + cfg["panel_near_dn"]]
-        info = {"name": a.text.upper(), "kind": "main", "power": "", "ptt": "", "kdt": ""}
-        for h in near:
-            up = h.text.upper().replace(" ", "")
-            if up.startswith("PTT:"):
-                m = _PNUM_RE.search(h.text.split(":", 1)[1]); info["ptt"] = m.group(1) if m else ""
-            elif up.startswith("P:"):
-                m = _PNUM_RE.search(h.text.split(":", 1)[1]); info["power"] = m.group(1) if m else ""
-            elif "KĐT" in up or "KDT" in up:
-                m = _PNUM_RE.search(h.text.split(":", 1)[-1]); info["kdt"] = m.group(1) if m else ""
-        out.append(info)
+    for a in labels:
+        kind = kinds[id(a)]
+        if kind == "main":
+            info = {"name": a.text.upper(), "kind": "main",
+                    "power": "", "ptt": "", "kdt": ""}
+            for h in _spec_cell(a, horiz, cfg):
+                up = h.text.upper().replace(" ", "")
+                if up.startswith("PTT:"):
+                    m = _PNUM_RE.search(h.text.split(":", 1)[1]); info["ptt"] = m.group(1) if m else ""
+                elif up.startswith("P:"):
+                    m = _PNUM_RE.search(h.text.split(":", 1)[1]); info["power"] = m.group(1) if m else ""
+                elif "KĐT" in up or "KDT" in up:
+                    m = _PNUM_RE.search(h.text.split(":", 1)[-1]); info["kdt"] = m.group(1) if m else ""
+            out.append(info)
+        elif kind == "sub":
+            cand = [n for n in nums
+                    if abs(n.x - a.x) <= cfg["pnum_x_tol"]
+                    and a.y - cfg["pnum_up"] <= n.y <= a.y + cfg["pnum_dn"]]
+            power = max(cand, key=lambda n: n.y).text if cand else ""
+            out.append({"name": a.text.upper(), "kind": "sub",
+                        "power": power, "ptt": "", "kdt": ""})
 
-    for a in [h for h in horiz if _SUB_PANEL_RE.match(h.text)]:
-        cand = [n for n in nums
-                if abs(n.x - a.x) <= cfg["pnum_x_tol"]
-                and a.y - cfg["pnum_up"] <= n.y <= a.y + cfg["pnum_dn"]]
-        power = max(cand, key=lambda n: n.y).text if cand else ""
-        out.append({"name": a.text.upper(), "kind": "sub", "power": power, "ptt": "", "kdt": ""})
-
-    return out
+    # giữ thứ tự cũ: tủ tổng trước, tủ con sau
+    return ([o for o in out if o["kind"] == "main"]
+            + [o for o in out if o["kind"] == "sub"])
 
 
 def _rows_by_y(refs, tol) -> list[list]:

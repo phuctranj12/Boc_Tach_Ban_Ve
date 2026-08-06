@@ -291,10 +291,28 @@ Giá trị `DrawingType` mà giao diện web liệt kê sẵn:
 
 ```
 ToBia  ToLot  DanhMucBanVe  Legend  MatBangCombine  MatBangThiCong
-SoDoNguyenLy  ChiTietLapDat
+SoDoNguyenLy  ChiTietLapDat  ChiTietMatCat  Blank
 ```
 
+Mười giá trị này khớp 1-1 với các loại bản vẽ của add-in Revit:
+
+| Key add-in | `DrawingType` |
+|---|---|
+| `DrwTp_CoverPage` | `ToBia` |
+| `DrwTp_LiningPage` | `ToLot` |
+| `DrwTp_DrawingList` | `DanhMucBanVe` |
+| `DrwTp_Legend` | `Legend` |
+| `DrwTp_SchematicDiagram` | `SoDoNguyenLy` |
+| `DrwTp_LayoutPlan` | `MatBangThiCong` |
+| `DrwTp_LayoutPlanCombine` | `MatBangCombine` |
+| `DrwTp_SectionDetail` | `ChiTietMatCat` |
+| `DrwTp_InstallationDetail` | `ChiTietLapDat` |
+| `DrwTp_Blank` | `Blank` |
+
 Giá trị `SourceType`: `Cover`, `Index`, `Cad`, `Blank`.
+
+> `Blank` xuất hiện ở cả hai danh sách nhưng là **hai trường khác nhau**:
+> `DrawingType = "Blank"` là tờ trắng, còn `SourceType = "Blank"` là nguồn nội dung rỗng.
 
 > Hai danh sách trên **không bị ép buộc** — API chấp nhận chuỗi bất kỳ. Chúng chỉ
 > là các lựa chọn dựng sẵn. Nhưng chỉ `SourceType = "Cad"` mới kích hoạt luật

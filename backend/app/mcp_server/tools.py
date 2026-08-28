@@ -25,8 +25,9 @@ from ..sheet_config import runner as _sc_runner
 from ..sheet_config.version import __version__ as _sc_version
 from ..storage import review_store, store
 
-# Bản vẽ vector hiếm khi > vài MB; chặn tải file quá lớn qua URL.
-_MAX_PDF_BYTES = 40 * 1024 * 1024
+# Bộ bản vẽ CAD nhiều trang có thể lên tới hàng trăm MB; chỉ chặn mức gây nguy
+# hiểm cho RAM của Space. Áp cho cả nhánh pdf_url (tải về) lẫn pdf_base64.
+_MAX_PDF_BYTES = 250 * 1024 * 1024
 _KINDS = ("auto", "panel_table", "busbar_slash", "hotel_db", "mep_tray")
 
 
@@ -132,7 +133,7 @@ def register_tools(mcp: FastMCP) -> None:
         if pdf_url:
             try:
                 req = _UrlRequest(pdf_url, headers={"User-Agent": "boc-tach-mcp"})
-                with urlopen(req, timeout=120) as resp:  # noqa: S310 — URL do người dùng cấp
+                with urlopen(req, timeout=300) as resp:  # noqa: S310 — URL do người dùng cấp
                     content = resp.read(_MAX_PDF_BYTES + 1)
             except Exception as exc:  # noqa: BLE001
                 raise ToolError(f"Không tải được PDF từ URL: {exc}") from exc

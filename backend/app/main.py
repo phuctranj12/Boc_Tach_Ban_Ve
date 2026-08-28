@@ -5,7 +5,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -95,9 +95,17 @@ if _DIST.is_dir():
     def _index():
         return FileResponse(_DIST / "index.html")
 
+    # Các đường dẫn client MCP dò để phát hiện OAuth. Không được để catch-all SPA
+    # trả 200 (index.html) — Claude thấy 200 ở đây sẽ tưởng server bắt đăng nhập
+    # rồi chạy luồng OAuth và fail ở POST /register. Phải trả 404 để nó kết luận
+    # "server không cần auth" và kết nối thẳng.
+    _MCP_PROBE_PREFIXES = (".well-known/oauth", "register", "authorize", "token")
+
     @app.get("/{path:path}")
     def _spa(path: str):
         """SPA fallback: đường dẫn không phải /api -> trả file tĩnh hoặc index.html."""
+        if path.startswith(_MCP_PROBE_PREFIXES):
+            raise HTTPException(status_code=404)
         f = _DIST / path
         if f.is_file():
             return FileResponse(f)

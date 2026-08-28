@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,12 +11,26 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
+from .mcp_server import build_mcp
 from .sheet_config import SHEET_CONFIG_WEB, router as sheet_config_router
+
+# Lớp MCP (Model Context Protocol) cho Claude — streamable HTTP tại /mcp, không auth.
+_mcp_app = build_mcp().streamable_http_app()
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    # FastAPI không tự chạy lifespan của sub-app được mount -> chạy lồng ở đây,
+    # nếu không session manager của MCP chưa khởi động và mọi request /mcp sẽ 500.
+    async with _mcp_app.router.lifespan_context(_mcp_app):
+        yield
+
 
 app = FastAPI(
     title="MEP Drawing Reader",
     description="Đọc bản vẽ MEP bằng Vector + Graph + Rule Engine.",
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 app.add_middleware(
@@ -30,6 +45,16 @@ app.include_router(router)
 # Sheet Configure: luồng độc lập, chỉ ở nhờ chung image. Phải đăng ký trước
 # catch-all SPA bên dưới, nếu không mọi /api/sheet-config/* sẽ rơi vào index.html.
 app.include_router(sheet_config_router)
+
+# MCP phải mount TRƯỚC catch-all SPA bên dưới, nếu không /mcp rơi vào index.html.
+# Endpoint thực nằm ở "/mcp/" (streamable_http_path="/"); client hay gõ "/mcp"
+# không dấu / -> Starlette Mount không tự redirect với POST nên phải tự chuyển 307.
+@app.api_route("/mcp", methods=["GET", "POST", "DELETE"], include_in_schema=False)
+async def _mcp_no_slash():
+    return RedirectResponse("/mcp/", status_code=307)
+
+
+app.mount("/mcp", _mcp_app)
 
 # Giao diện web của Sheet Configure tại /json-to-sheet. Bản build dùng base riêng
 # nên asset của nó nằm ở /json-to-sheet/assets, không đụng /assets của giao diện

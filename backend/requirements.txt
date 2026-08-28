@@ -1,7 +1,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pymupdf==1.27.2.3
-pydantic==2.10.4
+pydantic>=2.11,<3
 networkx==3.4.2
 python-multipart==0.0.20
 openpyxl==3.1.5
+mcp>=1.13,<2

@@ -248,3 +248,41 @@ Thoát mã `0` nếu tất cả PASS. Dùng để kiểm tra nhanh sau mỗi l�
 | `404` | Sai `job_id`/`page`, hoặc job đã bị xoá (Space restart) | Upload lại từ `/api/analyze` |
 | `500` | Lỗi khi phân tích | Kiểm tra PDF có phải bản vẽ vector hợp lệ |
 | `503` | Space đang khởi động (cold start) | Chờ vài giây rồi thử lại |
+
+---
+
+## 8. Kết nối qua MCP (dùng trực tiếp trong Claude)
+
+Ngoài REST, Space còn expose một **MCP server** (Model Context Protocol, transport
+streamable HTTP) để Claude Desktop / Claude Code / connector trên claude.ai gọi
+thẳng các chức năng mà không cần viết code.
+
+- **Endpoint:** `https://tranphuc120203-boc-tach-ban-ve.hf.space/mcp`
+- **Xác thực:** không (giống REST — ai có link đều dùng được).
+- **Trạng thái:** stateless; `job_id` chỉ sống trong phiên, mất khi Space restart.
+
+### Thêm vào Claude
+
+```bash
+# Claude Code
+claude mcp add --transport http boc-tach https://tranphuc120203-boc-tach-ban-ve.hf.space/mcp
+```
+
+Trên **claude.ai**: Settings → Connectors → *Add custom connector* → dán URL trên.
+
+### Tool có sẵn
+
+| Tool | Công dụng |
+|------|-----------|
+| `analyze_pdf(pdf_url \| pdf_base64)` | Nạp & phân tích PDF, trả `job_id` + danh sách trang |
+| `list_jobs()` | Liệt kê job còn lưu trên server |
+| `extract_page(job_id, page, kind="auto")` | Bóc tách khối lượng 1 trang |
+| `get_boq(job_id, confirm_all=True)` | BOQ gộp toàn dự án (mảng phẳng) |
+| `ask_drawing(job_id, question)` | Hỏi–đáp rule-based về quan hệ trong bản vẽ |
+| `normalize_sheet_config(source, strict=True)` | Chuẩn hoá `DocumentSetConfig` JSON/JSONC |
+| `validate_sheet_config(config_json)` | Kiểm tra 7 luật của cấu hình |
+| `get_sheet_config_template()` | Cấu hình mẫu |
+
+> Cold start vẫn áp dụng: lần gọi đầu sau khi Space ngủ mất 20–60s.
+> `analyze_pdf` cần `pdf_url` trỏ tới file `.pdf` tải trực tiếp được, hoặc
+> `pdf_base64` (chỉ nên dùng cho file nhỏ).

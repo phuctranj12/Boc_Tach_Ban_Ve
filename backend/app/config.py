@@ -5,16 +5,26 @@ mà không phải đụng vào logic.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 # --- Thư mục ---
-# Khi đóng gói (PyInstaller, sys.frozen): mã nguồn nằm trong thư mục tạm chỉ-đọc,
-# nên data phải ghi CẠNH file thực thi (.exe) để giữ được & người dùng thấy được.
-if getattr(sys, "frozen", False):
+# Thứ tự ưu tiên:
+#   1. Biến môi trường BOC_TACH_HOME (ứng dụng khác cài qua pip tự chọn chỗ ghi).
+#   2. Đóng gói (PyInstaller, sys.frozen): mã nguồn nằm trong thư mục tạm chỉ-đọc,
+#      nên data phải ghi CẠNH file thực thi (.exe) để giữ được & người dùng thấy được.
+#   3. Chạy từ repo: backend/.
+#   4. Cài qua pip (wheel): không được ghi vào site-packages -> ~/.boc_tach_ban_ve.
+_REPO_BACKEND = Path(__file__).resolve().parent.parent
+if os.getenv("BOC_TACH_HOME"):
+    APP_HOME = Path(os.environ["BOC_TACH_HOME"]).expanduser().resolve()
+elif getattr(sys, "frozen", False):
     APP_HOME = Path(sys.executable).resolve().parent
+elif (_REPO_BACKEND / "run.py").is_file():
+    APP_HOME = _REPO_BACKEND  # = backend/
 else:
-    APP_HOME = Path(__file__).resolve().parent.parent  # = backend/
+    APP_HOME = Path.home() / ".boc_tach_ban_ve"
 
 BASE_DIR = APP_HOME
 DATA_DIR = APP_HOME / "data"

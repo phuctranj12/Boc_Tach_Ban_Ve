@@ -1,0 +1,34 @@
+# Build wheel từ backend/ và đẩy lên GitLab Package Registry (PyPI) của project.
+# Chạy khi push tag, ví dụ: git tag v0.1.0 && git push origin v0.1.0
+# (version trong backend/app/__init__.py phải khớp tag, registry không cho ghi đè).
+
+stages:
+  - build
+  - publish
+
+build-wheel:
+  stage: build
+  image: python:3.12-slim
+  script:
+    - pip install --quiet build
+    - cd backend && python -m build
+  artifacts:
+    paths:
+      - backend/dist/
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+publish-wheel:
+  stage: publish
+  image: python:3.12-slim
+  needs: [build-wheel]
+  script:
+    - pip install --quiet twine
+    - >
+      TWINE_USERNAME=gitlab-ci-token TWINE_PASSWORD=${CI_JOB_TOKEN}
+      python -m twine upload
+      --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
+      backend/dist/*
+  rules:
+    - if: $CI_COMMIT_TAG

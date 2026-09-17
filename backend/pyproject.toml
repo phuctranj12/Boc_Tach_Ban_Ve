@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "boc-tach-ban-ve"
+dynamic = ["version"]
+description = "Bóc tách bản vẽ MEP (PDF) thành đối tượng, đồ thị quan hệ và BOQ — HAWEE"
+readme = "PACKAGE_README.md"
+requires-python = ">=3.10"
+authors = [{ name = "HAWEE" }]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34",
+    "pymupdf>=1.27",
+    "pydantic>=2.11,<3",
+    "networkx>=3.4",
+    "python-multipart>=0.0.20",
+    "openpyxl>=3.1",
+    "mcp>=1.13,<2",
+]
+
+[project.scripts]
+boc-tach-ban-ve = "boc_tach_ban_ve.cli:main"
+
+# Mã nguồn nằm ở backend/app (giữ nguyên cho Docker / run.py),
+# nhưng trong wheel được đổi tên thành package `boc_tach_ban_ve`.
+[tool.hatch.version]
+path = "app/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+exclude = ["**/__pycache__", "**/*.pyc"]
+
+[tool.hatch.build.targets.wheel.sources]
+"app" = "boc_tach_ban_ve"
+
+[tool.hatch.build.targets.sdist]
+include = ["app", "pyproject.toml", "PACKAGE_README.md"]
+exclude = ["**/__pycache__", "**/*.pyc"]

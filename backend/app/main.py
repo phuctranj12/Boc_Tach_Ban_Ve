@@ -1,6 +1,7 @@
 """Điểm vào FastAPI."""
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -83,7 +84,9 @@ def health():
 # --- Phục vụ giao diện đã build (production / đóng gói) ---
 # Khi đóng gói (PyInstaller): frontend/dist được nhúng vào thư mục tạm (_MEIPASS)
 # dưới tên 'frontend_dist'. Khi chạy thường: trỏ tới frontend/dist trong repo.
-if getattr(sys, "frozen", False):
+if os.getenv("BOC_TACH_FRONTEND_DIST"):
+    _DIST = Path(os.environ["BOC_TACH_FRONTEND_DIST"])
+elif getattr(sys, "frozen", False):
     _DIST = Path(sys._MEIPASS) / "frontend_dist"  # type: ignore[attr-defined]
 else:
     _DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"

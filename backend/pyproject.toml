@@ -9,6 +9,14 @@ description = "Bóc tách bản vẽ MEP (PDF) thành đối tượng, đồ th�
 readme = "PACKAGE_README.md"
 requires-python = ">=3.10"
 authors = [{ name = "HAWEE" }]
+keywords = ["mep", "pdf", "drawing", "takeoff", "boq", "mcp"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Framework :: FastAPI",
+    "Topic :: Scientific/Engineering",
+    "Natural Language :: Vietnamese",
+]
 dependencies = [
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.34",

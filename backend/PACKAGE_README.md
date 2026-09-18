@@ -6,7 +6,7 @@ Bóc tách bản vẽ MEP (PDF) của HAWEE: nhận diện đối tượng, dự
 ## Cài đặt
 
 ```bash
-pip install boc-tach-ban-ve --index-url <URL registry GitLab>
+pip install boc-tach-ban-ve
 ```
 
 ## Dùng như thư viện

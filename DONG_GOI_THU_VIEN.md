@@ -29,7 +29,27 @@ python -m twine upload \
   -u <tên-token> -p <token> backend/dist/*
 ```
 
-## 3. Ứng dụng khác cài đặt
+## 3. Phát hành công khai lên PyPI
+
+Job `publish-pypi` dùng Trusted Publishing: PyPI tin pipeline GitLab qua OIDC,
+không cần tạo/lưu token. Cấu hình một lần trên pypi.org
+(Account settings → Publishing → Add a new pending publisher → tab **GitLab**):
+
+| Trường | Giá trị |
+|---|---|
+| PyPI Project Name | `boc-tach-ban-ve` |
+| Namespace | `hawee-group3` |
+| Project name | `Boc_Tach_Ban_Ve` |
+| Top-level pipeline file path | `.gitlab-ci.yml` |
+| Environment name | `pypi` |
+
+Sau đó push tag như mục 2. Ai cũng cài được:
+
+```bash
+pip install boc-tach-ban-ve
+```
+
+## 4. Cài từ GitLab Registry (nội bộ, cần token)
 
 ```bash
 pip install boc-tach-ban-ve \

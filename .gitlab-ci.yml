@@ -1,6 +1,10 @@
-# Build wheel từ backend/ và đẩy lên GitLab Package Registry (PyPI) của project.
-# Chạy khi push tag, ví dụ: git tag v0.1.0 && git push origin v0.1.0
-# (version trong backend/app/__init__.py phải khớp tag, registry không cho ghi đè).
+# Build wheel từ backend/ rồi phát hành khi push tag, ví dụ:
+#   git tag v0.1.1 && git push gitlab v0.1.1
+# Version trong backend/app/__init__.py phải khớp tag (PyPI không cho ghi đè bản cũ).
+#
+# - publish-gitlab: đẩy lên GitLab Package Registry của project (dùng nội bộ).
+# - publish-pypi  : đẩy lên pypi.org bằng Trusted Publishing (OIDC), không cần
+#                   lưu token. Cấu hình phía PyPI: xem DONG_GOI_THU_VIEN.md.
 
 stages:
   - build
@@ -10,8 +14,9 @@ build-wheel:
   stage: build
   image: python:3.12-slim
   script:
-    - pip install --quiet build
+    - pip install --quiet build twine
     - cd backend && python -m build
+    - python -m twine check dist/*
   artifacts:
     paths:
       - backend/dist/
@@ -19,7 +24,7 @@ build-wheel:
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-publish-wheel:
+publish-gitlab:
   stage: publish
   image: python:3.12-slim
   needs: [build-wheel]
@@ -30,5 +35,31 @@ publish-wheel:
       python -m twine upload
       --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
       backend/dist/*
+  rules:
+    - if: $CI_COMMIT_TAG
+
+publish-pypi:
+  stage: publish
+  image: python:3.12-slim
+  needs: [build-wheel]
+  environment: pypi
+  id_tokens:
+    PYPI_ID_TOKEN:
+      aud: pypi
+  script:
+    - pip install --quiet twine
+    # Đổi OIDC token của GitLab lấy API token ngắn hạn của PyPI.
+    - |
+      PYPI_API_TOKEN=$(python - <<'EOF'
+      import json, os, urllib.request
+      req = urllib.request.Request(
+          "https://pypi.org/_/oidc/mint-token",
+          data=json.dumps({"token": os.environ["PYPI_ID_TOKEN"]}).encode(),
+          headers={"Content-Type": "application/json"},
+      )
+      print(json.load(urllib.request.urlopen(req))["token"])
+      EOF
+      )
+    - TWINE_USERNAME=__token__ TWINE_PASSWORD="$PYPI_API_TOKEN" python -m twine upload backend/dist/*
   rules:
     - if: $CI_COMMIT_TAG
